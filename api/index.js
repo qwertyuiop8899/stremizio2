@@ -295,8 +295,11 @@ async function fetchCorsaroNeroSingle(searchQuery, type = 'movie') {
             const torrentTitle = titleElement.text().trim();
 
             console.log(`🏴‍☠️   - Processing row: "${torrentTitle}"`);
-            // --- NUOVA MODIFICA: Validazione per query brevi ---
-            if (!isGoodShortQueryMatch(torrentTitle, searchQuery)) {
+            // --- NUOVA MODIFICA: Validazione per query brevi (skip per season packs) ---
+            // I season pack possono avere titoli molto diversi dalla query, es: "Stagione 1-34"
+            const looksLikeSeasonPack = /stagion[ei]|season|completa|complete|s\d+\s*[-–—]\s*s?\d+/i.test(torrentTitle);
+            if (!looksLikeSeasonPack && !isGoodShortQueryMatch(torrentTitle, searchQuery)) {
+                console.log(`🏴‍☠️   - Skipped: doesn't match short query validation`);
                 return null;
             }
             // --- FINE MODIFICA ---
@@ -313,37 +316,91 @@ async function fetchCorsaroNeroSingle(searchQuery, type = 'movie') {
             const torrentPageUrl = `${CORSARO_BASE_URL}${torrentPath}`;
 
             try {
-                const detailResponse = await fetch(torrentPageUrl, { headers: { 'Referer': searchUrl } });
-                if (!detailResponse.ok) return null;
+                console.log(`🏴‍☠️   - Fetching detail page: ${torrentPageUrl}`);
+                const detailResponse = await fetch(torrentPageUrl, { 
+                    headers: { 
+                        'Referer': searchUrl,
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    } 
+                });
+                
+                if (!detailResponse.ok) {
+                    console.log(`🏴‍☠️   - Detail page returned status: ${detailResponse.status}`);
+                    return null;
+                }
 
                 const detailHtml = await detailResponse.text();
+                console.log(`🏴‍☠️   - Detail page loaded, HTML size: ${detailHtml.length} chars`);
                 const $$ = cheerio.load(detailHtml);
 
-                // --- MODIFICA: Logica di estrazione del magnet link più robusta ---
-                let magnetLink = $$('a[href^="magnet:?"]').attr('href');
+                // --- MODIFICA: Logica di estrazione del magnet link ULTRA robusta ---
+                let magnetLink = null;
                 
-                // Fallback 1: Selettore specifico originale
+                // Method 1: Standard magnet link selector
+                magnetLink = $$('a[href^="magnet:?"]').attr('href');
+                if (magnetLink) {
+                    console.log(`🏴‍☠️ [Method 1] Found magnet link with standard selector`);
+                }
+                
+                // Method 2: Selettore specifico originale
                 if (!magnetLink) {
                     const mainDiv = $$("div.w-full:nth-child(2)");
                     if (mainDiv.length) {
                         magnetLink = mainDiv.find("a.w-full:nth-child(1)").attr('href');
+                        if (magnetLink) console.log(`🏴‍☠️ [Method 2] Found magnet link with div selector`);
                     }
                 }
 
-                // Fallback 2: Cerca un link con un'icona a forma di magnete (comune)
+                // Method 3: Cerca un link con un'icona a forma di magnete
                 if (!magnetLink) {
                     magnetLink = $$('a:has(i.fa-magnet)').attr('href');
+                    if (magnetLink) console.log(`🏴‍☠️ [Method 3] Found magnet link with icon selector`);
                 }
 
-                // Fallback 3: Search the entire page text for a magnet link pattern (very robust)
+                // Method 4: Cerca tutti i link e filtra per magnet
                 if (!magnetLink) {
-                    const bodyHtml = $$.html(); // Get the full HTML content of the page
-                    // This regex looks for a magnet link inside quotes or as plain text.
-                    const magnetMatch = bodyHtml.match(/["'>\s](magnet:\?xt=urn:btih:[^"'\s<>]+)/i);
+                    $$('a').each((i, elem) => {
+                        const href = $$(elem).attr('href');
+                        if (href && href.startsWith('magnet:')) {
+                            magnetLink = href;
+                            console.log(`🏴‍☠️ [Method 4] Found magnet link by scanning all anchors`);
+                            return false; // break
+                        }
+                    });
+                }
+
+                // Method 5: Cerca nel raw HTML con regex più aggressivo
+                if (!magnetLink) {
+                    const bodyHtml = $$.html();
+                    // Cerca qualsiasi occorrenza di magnet link, anche parziale
+                    const magnetMatch = bodyHtml.match(/(magnet:\?xt=urn:btih:[a-zA-Z0-9]+[^"'\s<>&]*)/i);
                     if (magnetMatch && magnetMatch[1]) {
                         magnetLink = magnetMatch[1];
-                        console.log('🏴‍☠️ [Magnet Fallback] Found magnet link using raw HTML search.');
+                        console.log(`🏴‍☠️ [Method 5] Found magnet link using raw HTML regex`);
                     }
+                }
+                
+                // Method 6: Cerca in script tags o attributi data-*
+                if (!magnetLink) {
+                    $$('script').each((i, elem) => {
+                        const scriptContent = $$(elem).html();
+                        const magnetMatch = scriptContent?.match(/(magnet:\?xt=urn:btih:[a-zA-Z0-9]+[^"'\s<>&]*)/i);
+                        if (magnetMatch && magnetMatch[1]) {
+                            magnetLink = magnetMatch[1];
+                            console.log(`🏴‍☠️ [Method 6] Found magnet link in script tag`);
+                            return false;
+                        }
+                    });
+                }
+                
+                // Log per debug se non trovato
+                if (!magnetLink) {
+                    console.log(`🏴‍☠️ ❌ FAILED to find magnet link for: "${torrentTitle}"`);
+                    console.log(`🏴‍☠️ 🔍 Page URL: ${torrentPageUrl}`);
+                    console.log(`🏴‍☠️ 📄 HTML length: ${detailHtml.length} chars`);
+                    console.log(`🏴‍☠️ 🔗 Total links found: ${$$('a').length}`);
+                    // Log first 500 chars of page for debugging
+                    console.log(`🏴‍☠️ 📝 HTML preview: ${detailHtml.substring(0, 500)}`);
                 }
                 // --- FINE MODIFICA ---
                 
