@@ -3407,31 +3407,25 @@ export default async function handler(req, res) {
                 if (torrent.status === 'waiting_files_selection') {
                     console.log(`[RealDebrid] Selecting files...`);
                     
-                    // 🎯 Try smart episode matching first (for series)
-                    let targetFile = null;
-                    if (type === 'series' && season && episode) {
-                        targetFile = findEpisodeFileInPack(torrent.files, parseInt(season), parseInt(episode));
-                    }
+                    // Note: /rd-stream/ endpoint doesn't have season/episode context
+                    // Smart episode matching only works in /stream/ endpoint
+                    const videoExtensions = ['.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm'];
+                    const junkKeywords = ['sample', 'trailer', 'extra', 'bonus', 'extras'];
                     
-                    // Fallback to largest video if no episode match
-                    if (!targetFile) {
-                        const videoExtensions = ['.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm'];
-                        const junkKeywords = ['sample', 'trailer', 'extra', 'bonus', 'extras'];
-                        
-                        const videoFiles = (torrent.files || [])
-                            .filter(file => {
-                                const lowerPath = file.path.toLowerCase();
-                                return videoExtensions.some(ext => lowerPath.endsWith(ext));
-                            })
-                            .filter(file => {
-                                const lowerPath = file.path.toLowerCase();
-                                return !junkKeywords.some(junk => lowerPath.includes(junk)) || file.bytes > 250 * 1024 * 1024;
-                            })
-                            .sort((a, b) => b.bytes - a.bytes);
-                        
-                        targetFile = videoFiles[0] || torrent.files.sort((a, b) => b.bytes - a.bytes)[0];
-                        console.log(`[RealDebrid] Using fallback: largest video file`);
-                    }
+                    const videoFiles = (torrent.files || [])
+                        .filter(file => {
+                            const lowerPath = file.path.toLowerCase();
+                            return videoExtensions.some(ext => lowerPath.endsWith(ext));
+                        })
+                        .filter(file => {
+                            const lowerPath = file.path.toLowerCase();
+                            return !junkKeywords.some(junk => lowerPath.includes(junk)) || file.bytes > 250 * 1024 * 1024;
+                        })
+                        .sort((a, b) => b.bytes - a.bytes);
+                    
+                    const targetFile = videoFiles[0] || torrent.files.sort((a, b) => b.bytes - a.bytes)[0];
+                    console.log(`[RealDebrid] Using fallback: largest video file (no episode context)`);
+
                     
                     if (targetFile) {
                         await realdebrid.selectFiles(torrent.id, targetFile.id);
@@ -3453,31 +3447,23 @@ export default async function handler(req, res) {
                     
                     const selectedFiles = (torrent.files || []).filter(file => file.selected === 1);
                     
-                    // 🎯 Try smart episode matching first (for series)
-                    let targetFile = null;
-                    if (type === 'series' && season && episode) {
-                        targetFile = findEpisodeFileInPack(selectedFiles, parseInt(season), parseInt(episode));
-                    }
+                    // Note: /rd-stream/ endpoint doesn't have season/episode context
+                    // Smart episode matching only works in /stream/ endpoint
+                    const videoExtensions = ['.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm'];
+                    const junkKeywords = ['sample', 'trailer', 'extra', 'bonus', 'extras'];
                     
-                    // Fallback to largest video if no episode match
-                    if (!targetFile) {
-                        const videoExtensions = ['.mkv', '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm'];
-                        const junkKeywords = ['sample', 'trailer', 'extra', 'bonus', 'extras'];
-                        
-                        const videos = selectedFiles
-                            .filter(file => {
-                                const lowerPath = file.path.toLowerCase();
-                                return videoExtensions.some(ext => lowerPath.endsWith(ext));
-                            })
-                            .filter(file => {
-                                const lowerPath = file.path.toLowerCase();
-                                return !junkKeywords.some(junk => lowerPath.includes(junk)) || file.bytes > 250 * 1024 * 1024;
-                            })
-                            .sort((a, b) => b.bytes - a.bytes);
-                        
-                        targetFile = videos[0] || selectedFiles.sort((a, b) => b.bytes - a.bytes)[0];
-                        console.log(`[RealDebrid] Using fallback: largest video file`);
-                    }
+                    const videos = selectedFiles
+                        .filter(file => {
+                            const lowerPath = file.path.toLowerCase();
+                            return videoExtensions.some(ext => lowerPath.endsWith(ext));
+                        })
+                        .filter(file => {
+                            const lowerPath = file.path.toLowerCase();
+                            return !junkKeywords.some(junk => lowerPath.includes(junk)) || file.bytes > 250 * 1024 * 1024;
+                        })
+                        .sort((a, b) => b.bytes - a.bytes);
+                    
+                    const targetFile = videos[0] || selectedFiles.sort((a, b) => b.bytes - a.bytes)[0];
                     
                     if (!targetFile) {
                         console.log(`[RealDebrid] No video file found`);
