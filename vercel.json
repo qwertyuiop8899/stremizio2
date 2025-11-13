@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "../template.html"
+    }
+  },
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/api/index.js" }
+  ]
+}

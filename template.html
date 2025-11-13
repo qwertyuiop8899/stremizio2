@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="it">
+<head> 
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/png" href="/logo.png">
+    <title>Stremizio | Configurazione</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --surface-color: #2a2a2a;
+            --primary-color: #ae79ff;
+            --text-color: #e0e0e0;
+            --text-muted-color: #a0a0a0;
+            --border-color: #444;
+            --success-color: #4EC9B0;
+            --error-color: #FF6B6B;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 500px;
+            padding: 30px;
+            background-color: var(--surface-color);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border-color);
+        }
+        .logo {
+            display: block;
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 15px auto;
+            border-radius: 16px;
+        }
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        .description {
+            text-align: left;
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: var(--bg-color);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+        .description h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: var(--primary-color);
+        }
+        .description ul { padding-left: 20px; margin: 0; }
+        .description li { margin-bottom: 8px; color: var(--text-muted-color); }
+        .description li:last-child { margin-bottom: 0; }
+        p { text-align: center; color: var(--text-muted-color); margin-bottom: 20px; }
+        #status {
+            text-align: center;
+            margin: 15px 0;
+            font-weight: 500;
+            min-height: 1.2em;
+            transition: color 0.3s ease;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            background-color: var(--bg-color);
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-color);
+            font-size: 1em;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(174, 121, 255, 0.2);
+        }
+        .button-group { display: flex; justify-content: center; gap: 10px; }
+        button {
+            background-color: var(--primary-color);
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+        }
+        button:hover:not(:disabled) { background-color: #9962e8; }
+        button:active:not(:disabled) { transform: scale(0.98); }
+        button:disabled { background-color: #555; color: #888; cursor: not-allowed; }
+        #link-container { display: none; margin-top: 20px; }
+        textarea { resize: vertical; }
+        .links { text-align: center; margin-top: 25px; }
+        a { color: var(--primary-color); text-decoration: none; transition: color 0.3s ease; }
+        a:hover { color: #c5a5ff; }
+    </style>
+</head>
+<body>
+    <div class="container"> 
+        <img src="/logo.png" alt="Stremizio Logo" class="logo">
+        <h1>Stremizio 2.0</h1>
+        <div class="description">
+            <h4>Caratteristiche principali:</h4>
+            <ul>
+                <li><strong>Multi-sorgente:</strong> Il Corsaro Nero, UIndex, Knaben e Jackettio (opzionale).</li>
+                <li><strong>Ottimizzato per l'Italia:</strong> Priorità ai contenuti in italiano 🇮🇹</li>
+                <li><strong>Debrid:</strong> Real-Debrid, Torbox e/o AllDebrid per streaming istantaneo.</li>
+                <li><strong>MediaFlow Proxy:</strong> Condividi Real-Debrid in sicurezza (opzionale).</li>
+                <li><strong>P2P Fallback:</strong> Senza debrid usa streaming P2P diretto.</li>
+            </ul>
+        </div>
+        <p>Configura i servizi che vuoi utilizzare:</p>
+        <div id="status"></div>
+        
+        <!-- Real-Debrid -->
+        <h3 style="color: var(--primary-color); margin-bottom: 10px; margin-top: 25px;">🔵 Real-Debrid (Opzionale)</h3>
+        <label style="display: flex; align-items: center; margin-bottom: 10px; cursor: pointer;">
+            <input type="checkbox" id="use_rd" style="width: auto; margin-right: 10px;">
+            <span>Abilita Real-Debrid</span>
+        </label>
+        <input id="rd_key" placeholder="Real-Debrid API Key" type="password" disabled>
+        
+        <!-- Torbox -->
+        <h3 style="color: var(--primary-color); margin-bottom: 10px; margin-top: 25px;">📦 Torbox (Opzionale)</h3>
+        <label style="display: flex; align-items: center; margin-bottom: 10px; cursor: pointer;">
+            <input type="checkbox" id="use_torbox" style="width: auto; margin-right: 10px;">
+            <span>Abilita Torbox</span>
+        </label>
+        <input id="torbox_key" placeholder="Torbox API Key" type="password" disabled>
+        
+        <!-- AllDebrid -->
+        <h3 style="color: var(--primary-color); margin-bottom: 10px; margin-top: 25px;">🅰️ AllDebrid (Opzionale)</h3>
+        <label style="display: flex; align-items: center; margin-bottom: 10px; cursor: pointer;">
+            <input type="checkbox" id="use_alldebrid" style="width: auto; margin-right: 10px;">
+            <span>Abilita AllDebrid</span>
+        </label>
+        <input id="alldebrid_key" placeholder="AllDebrid API Key" type="password" disabled>
+        
+        <!-- MediaFlow Proxy -->
+        <h3 style="color: var(--primary-color); margin-bottom: 10px; margin-top: 25px;">🔀 MediaFlow Proxy (Opzionale - Solo per RD)</h3>
+        <p style="font-size: 0.9em; color: var(--text-muted-color); margin-bottom: 10px;">
+            Per condividere Real-Debrid tra più utenti
+        </p>
+        <input id="mediaflow_url" placeholder="MediaFlow URL (es: https://your-mfp.com)" type="text">
+        <input id="mediaflow_password" placeholder="MediaFlow Password" type="password">
+        
+        <!-- Jackettio -->
+        <h3 style="color: var(--primary-color); margin-bottom: 10px; margin-top: 25px;">🔍 Jackettio (Opzionale - Solo Italiani)</h3>
+        <p style="font-size: 0.9em; color: var(--text-muted-color); margin-bottom: 10px;">
+            Cerca su indexer configurati (solo risultati italiani 🇮🇹)
+        </p>
+        <input id="jackett_url" placeholder="Jackett URL (es: https://jackett.your-domain.com)" type="text">
+        <input id="jackett_api_key" placeholder="Jackett API Key" type="password">
+        <input id="jackett_password" placeholder="Jackett Password (opzionale)" type="password">
+        
+        <!-- Selezione Siti di Ricerca -->
+        <h3 style="color: var(--primary-color); margin-bottom: 10px; margin-top: 25px;">🔎 Siti di Ricerca Torrent</h3>
+        <p style="font-size: 0.9em; color: var(--text-muted-color); margin-bottom: 10px;">
+            Seleziona su quali siti cercare i torrent:
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px;">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="checkbox" id="use_corsaronero" checked style="width: auto; margin-right: 10px;">
+                <span>🏴‍☠️ Il Corsaro Nero (Italiano)</span>
+            </label>
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="checkbox" id="use_uindex" checked style="width: auto; margin-right: 10px;">
+                <span>📚 UIndex (Internazionale)</span>
+            </label>
+            <label style="display: flex; align-items: center; cursor: pointer;">
+                <input type="checkbox" id="use_knaben" checked style="width: auto; margin-right: 10px;">
+                <span>🦉 Knaben (Internazionale)</span>
+            </label>
+        </div>
+        
+        <div class="button-group" style="margin-top: 30px;">
+            <button id="install_button" disabled>Installa Addon</button>
+            <button id="copy_button" disabled>Copia Link</button>
+        </div>
+        <div id="link-container">
+            <p><small>Link di installazione generato:</small></p>
+            <textarea id="install_link_display" rows="3" readonly></textarea>
+        </div>
+        <div class="links">
+            <a href="https://real-debrid.com/apitoken" target="_blank">Real-Debrid Key</a> | 
+            <a href="https://torbox.app/settings" target="_blank">Torbox Key</a> | 
+            <a href="https://alldebrid.com/apikeys/" target="_blank">AllDebrid Key</a>
+        </div>
+    </div>
+    <script>
+        // Input fields
+        const useRdCheckbox = document.getElementById("use_rd");
+        const rdKeyInput = document.getElementById("rd_key");
+        const useTorboxCheckbox = document.getElementById("use_torbox");
+        const torboxKeyInput = document.getElementById("torbox_key");
+        const useAllDebridCheckbox = document.getElementById("use_alldebrid");
+        const allDebridKeyInput = document.getElementById("alldebrid_key");
+        const mediaflowUrlInput = document.getElementById("mediaflow_url");
+        const mediaflowPasswordInput = document.getElementById("mediaflow_password");
+        const jackettUrlInput = document.getElementById("jackett_url");
+        const jackettApiKeyInput = document.getElementById("jackett_api_key");
+        const jackettPasswordInput = document.getElementById("jackett_password");
+        
+        // Checkboxes for search sites
+        const useCorsaroNeroCheckbox = document.getElementById("use_corsaronero");
+        const useUIndexCheckbox = document.getElementById("use_uindex");
+        const useKnabenCheckbox = document.getElementById("use_knaben");
+        
+        // Buttons
+        const installButton = document.getElementById("install_button");
+        const copyButton = document.getElementById("copy_button");
+        const statusEl = document.getElementById("status");
+        const linkContainer = document.getElementById("link-container");
+        const installLinkDisplay = document.getElementById("install_link_display");
+
+        // Enable/disable RD input based on checkbox
+        useRdCheckbox.addEventListener('change', () => {
+            rdKeyInput.disabled = !useRdCheckbox.checked;
+            if (!useRdCheckbox.checked) rdKeyInput.value = '';
+            updateInstallLink();
+        });
+
+        // Enable/disable Torbox input based on checkbox
+        useTorboxCheckbox.addEventListener('change', () => {
+            torboxKeyInput.disabled = !useTorboxCheckbox.checked;
+            if (!useTorboxCheckbox.checked) torboxKeyInput.value = '';
+            updateInstallLink();
+        });
+
+        // Enable/disable AllDebrid input based on checkbox
+        useAllDebridCheckbox.addEventListener('change', () => {
+            allDebridKeyInput.disabled = !useAllDebridCheckbox.checked;
+            if (!useAllDebridCheckbox.checked) allDebridKeyInput.value = '';
+            updateInstallLink();
+        });
+
+        function updateInstallLink() {
+            // TMDB is now hardcoded, no validation needed
+            const tmdbKey = '5462f78469f3d80bf5201645294c16e4';
+
+            // Build config object (TMDB always included)
+            const config = { tmdb_key: tmdbKey };
+            
+            // Real-Debrid
+            if (useRdCheckbox.checked) {
+                const rdKey = rdKeyInput.value.trim();
+                if (rdKey) {
+                    config.use_rd = true;
+                    config.rd_key = rdKey;
+                }
+            }
+            
+            // Torbox
+            if (useTorboxCheckbox.checked) {
+                const torboxKey = torboxKeyInput.value.trim();
+                if (torboxKey) {
+                    config.use_torbox = true;
+                    config.torbox_key = torboxKey;
+                }
+            }
+            
+            // AllDebrid
+            if (useAllDebridCheckbox.checked) {
+                const allDebridKey = allDebridKeyInput.value.trim();
+                if (allDebridKey) {
+                    config.use_alldebrid = true;
+                    config.alldebrid_key = allDebridKey;
+                }
+            }
+            
+            // MediaFlow Proxy
+            const mediaflowUrl = mediaflowUrlInput.value.trim();
+            const mediaflowPassword = mediaflowPasswordInput.value.trim();
+            if (mediaflowUrl && mediaflowPassword) {
+                config.mediaflow_url = mediaflowUrl;
+                config.mediaflow_password = mediaflowPassword;
+            }
+            
+            // Jackettio
+            const jackettUrl = jackettUrlInput.value.trim();
+            const jackettApiKey = jackettApiKeyInput.value.trim();
+            if (jackettUrl && jackettApiKey) {
+                config.jackett_url = jackettUrl;
+                config.jackett_api_key = jackettApiKey;
+                
+                const jackettPassword = jackettPasswordInput.value.trim();
+                if (jackettPassword) {
+                    config.jackett_password = jackettPassword;
+                }
+            }
+            
+            // Search sites selection
+            config.use_corsaronero = useCorsaroNeroCheckbox.checked;
+            config.use_uindex = useUIndexCheckbox.checked;
+            config.use_knaben = useKnabenCheckbox.checked;
+            
+            // Generate install URL
+            const encodedConfig = btoa(JSON.stringify(config));
+            const installUrl = `stremio://${window.location.host}/${encodedConfig}/manifest.json`;
+            
+            installLinkDisplay.value = installUrl;
+            linkContainer.style.display = "block";
+            installButton.disabled = false;
+            copyButton.disabled = false;
+            
+            // Status message
+            let services = [];
+            if (config.use_rd) services.push("Real-Debrid");
+            if (config.use_torbox) services.push("Torbox");
+            if (config.use_alldebrid) services.push("AllDebrid");
+            if (config.mediaflow_url) services.push("MediaFlow");
+            if (config.jackett_url) services.push("Jackettio");
+            
+            // Search sites
+            let searchSites = [];
+            if (config.use_corsaronero) searchSites.push("CorsaroNero");
+            if (config.use_uindex) searchSites.push("UIndex");
+            if (config.use_knaben) searchSites.push("Knaben");
+            
+            const serviceText = services.length > 0 ? ` (${services.join(', ')})` : ' (Solo P2P)';
+            const searchText = searchSites.length > 0 ? ` | Siti: ${searchSites.join(', ')}` : ' | ⚠️ Nessun sito selezionato';
+            statusEl.textContent = `✓ Configurazione pronta${serviceText}${searchText}`;
+            statusEl.style.color = 'var(--success-color)';
+        }
+
+        // Event listeners for all inputs
+        rdKeyInput.addEventListener('input', updateInstallLink);
+        torboxKeyInput.addEventListener('input', updateInstallLink);
+        allDebridKeyInput.addEventListener('input', updateInstallLink);
+        mediaflowUrlInput.addEventListener('input', updateInstallLink);
+        mediaflowPasswordInput.addEventListener('input', updateInstallLink);
+        jackettUrlInput.addEventListener('input', updateInstallLink);
+        jackettApiKeyInput.addEventListener('input', updateInstallLink);
+        jackettPasswordInput.addEventListener('input', updateInstallLink);
+        
+        // Event listeners for search site checkboxes
+        useCorsaroNeroCheckbox.addEventListener('change', updateInstallLink);
+        useUIndexCheckbox.addEventListener('change', updateInstallLink);
+        useKnabenCheckbox.addEventListener('change', updateInstallLink);
+        
+        // Initial call to enable buttons
+        updateInstallLink();
+
+        installButton.addEventListener('click', () => {
+            if (installLinkDisplay.value) window.location.href = installLinkDisplay.value;
+        });
+
+        copyButton.addEventListener('click', () => {
+            if (installLinkDisplay.value) {
+                navigator.clipboard.writeText(installLinkDisplay.value).then(() => {
+                    statusEl.textContent = "✓ Link copiato negli appunti!";
+                    const originalText = copyButton.textContent;
+                    copyButton.textContent = "Copiato!";
+                    setTimeout(() => {
+                        copyButton.textContent = originalText;
+                        updateInstallLink(); // Restore status
+                    }, 2000);
+                });
+            }
+        });
+    </script>
+</body>
+</html>
