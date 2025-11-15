@@ -1217,6 +1217,10 @@ class RealDebrid {
             const url = `${this.baseUrl}/torrents/instantAvailability/${batch.join('/')}`;
 
             try {
+                console.log(`🔵 [RD Debug] Request URL: ${url}`);
+                console.log(`🔵 [RD Debug] API Key length: ${this.apiKey.length}`);
+                console.log(`🔵 [RD Debug] Batch hashes: ${batch.join(', ')}`);
+                
                 const response = await fetch(url, {
                     headers: {
                         'Authorization': `Bearer ${this.apiKey}`
@@ -1225,7 +1229,9 @@ class RealDebrid {
                 });
 
                 if (!response.ok) {
+                    const errorBody = await response.text().catch(() => 'Unable to read error body');
                     console.error(`❌ RD Cache API error: ${response.status} ${response.statusText}`);
+                    console.error(`❌ RD Error body: ${errorBody}`);
                     // Mark all batch as not cached on API error
                     batch.forEach(hash => {
                         results[hash.toLowerCase()] = { 
@@ -2668,16 +2674,42 @@ async function handleStream(type, id, config, workerOrigin) {
         if (useRealDebrid) {
             console.log('🔵 Checking Real-Debrid cache...');
             cacheChecks.push(
-                Promise.all([
-                    rdService.checkCache(hashes),
-                    rdService.getTorrents().catch(e => {
+                (async () => {
+                    // STEP 1: Check DB cache first (Torrentio-style)
+                    let dbCachedResults = {};
+                    if (dbEnabled) {
+                        dbCachedResults = await dbHelper.getRdCachedAvailability(hashes);
+                        console.log(`💾 [DB Cache] ${Object.keys(dbCachedResults).length}/${hashes.length} hashes found in cache`);
+                    }
+                    
+                    // STEP 2: Find hashes NOT in cache (need API call)
+                    const uncachedHashes = hashes.filter(h => !dbCachedResults[h.toLowerCase()]);
+                    
+                    // STEP 3: Call instantAvailability ONLY for uncached hashes
+                    let apiResults = {};
+                    if (uncachedHashes.length > 0) {
+                        console.log(`🔵 Calling RD API for ${uncachedHashes.length} uncached hashes...`);
+                        apiResults = await rdService.checkCache(uncachedHashes);
+                        
+                        // STEP 4: Save API results to DB for future use
+                        if (dbEnabled && Object.keys(apiResults).length > 0) {
+                            const cacheUpdates = Object.entries(apiResults).map(([hash, data]) => ({
+                                hash: hash,
+                                cached: data.cached || false
+                            }));
+                            await dbHelper.updateRdCacheStatus(cacheUpdates);
+                        }
+                    }
+                    
+                    // STEP 5: Merge DB cache + API results
+                    rdCacheResults = { ...dbCachedResults, ...apiResults };
+                    
+                    // STEP 6: Get user torrents (personal cache)
+                    rdUserTorrents = await rdService.getTorrents().catch(e => {
                         console.error("⚠️ Failed to fetch RD user torrents.", e.message);
                         return [];
-                    })
-                ]).then(([cache, torrents]) => {
-                    rdCacheResults = cache;
-                    rdUserTorrents = torrents;
-                })
+                    });
+                })()
             );
         }
         
