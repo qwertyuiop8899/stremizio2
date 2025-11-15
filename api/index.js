@@ -1931,6 +1931,7 @@ async function getTMDBDetailsByImdb(imdbId, tmdbApiKey) {
 async function enrichDatabaseInBackground(mediaDetails, type, season = null, episode = null, dbHelper) {
     try {
         console.log(`🔄 [Background] Starting CorsaroNero enrichment for: ${mediaDetails.title}`);
+        console.log(`🔄 [Background] CODE VERSION: 2024-11-15-v2 (Italian title support)`);
         
         // If we have IMDB but not TMDB, try to get TMDB ID
         if (mediaDetails.imdbId && !mediaDetails.tmdbId) {
