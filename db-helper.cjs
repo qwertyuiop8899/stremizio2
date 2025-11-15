@@ -382,47 +382,94 @@ async function batchInsertTorrents(torrents) {
  * @param {string} infoHash - Torrent info hash
  * @param {number} fileIndex - RealDebrid file.id (1-based)
  * @param {string} filePath - Full file path (will extract filename)
+ * @param {Object} episodeInfo - Optional: {imdbId, season, episode} for series
  * @returns {Promise<boolean>} Success status
  */
-async function updateTorrentFileInfo(infoHash, fileIndex, filePath) {
+async function updateTorrentFileInfo(infoHash, fileIndex, filePath, episodeInfo = null) {
   if (!pool) throw new Error('Database not initialized');
   
   try {
-    console.log(`💾 [DB updateTorrentFileInfo] Input: hash=${infoHash}, fileIndex=${fileIndex}, filePath=${filePath}`);
-    console.log(`💾 [DB updateTorrentFileInfo] Pool status: host=${pool.options.host}, database=${pool.options.database}, connected=${pool.totalCount}`);
+    console.log(`💾 [DB updateTorrentFileInfo] Input: hash=${infoHash}, fileIndex=${fileIndex}, filePath=${filePath}, episodeInfo=`, episodeInfo);
     
     // Extract just the filename from path
     const fileName = filePath.split('/').pop().split('\\').pop();
     console.log(`💾 [DB updateTorrentFileInfo] Extracted filename: ${fileName}`);
     
-    // First, verify the torrent exists
-    const checkQuery = `SELECT info_hash, title, file_index, file_title FROM torrents WHERE info_hash = $1`;
-    const checkRes = await pool.query(checkQuery, [infoHash.toLowerCase()]);
-    console.log(`💾 [DB updateTorrentFileInfo] Pre-update check: found=${checkRes.rowCount} rows`, checkRes.rows[0] || 'NOT FOUND');
-    
-    const query = `
-      UPDATE torrents
-      SET file_index = $1,
-          file_title = $2
-      WHERE info_hash = $3
-    `;
-    
-    console.log(`💾 [DB updateTorrentFileInfo] Executing UPDATE with: fileIndex=${fileIndex}, fileName=${fileName}, hash=${infoHash.toLowerCase()}`);
-    
-    const res = await pool.query(query, [fileIndex, fileName, infoHash.toLowerCase()]);
-    
-    console.log(`💾 [DB updateTorrentFileInfo] UPDATE result: rowCount=${res.rowCount}`);
-    
-    // Verify the update worked
-    const verifyRes = await pool.query(checkQuery, [infoHash.toLowerCase()]);
-    console.log(`💾 [DB updateTorrentFileInfo] Post-update verification:`, verifyRes.rows[0] || 'NOT FOUND');
-    
-    if (res.rowCount > 0) {
-      console.log(`✅ [DB] Updated file info for ${infoHash}: fileIndex=${fileIndex}, filename=${fileName}`);
-      return true;
+    // If episodeInfo is provided, save to 'files' table (for series episodes)
+    if (episodeInfo && episodeInfo.imdbId && episodeInfo.season && episodeInfo.episode) {
+      console.log(`💾 [DB] Saving episode file: ${episodeInfo.imdbId} S${episodeInfo.season}E${episodeInfo.episode}`);
+      
+      // Check if file already exists
+      const checkQuery = `
+        SELECT file_index FROM files 
+        WHERE info_hash = $1 
+          AND imdb_id = $2 
+          AND imdb_season = $3 
+          AND imdb_episode = $4
+      `;
+      const checkRes = await pool.query(checkQuery, [
+        infoHash.toLowerCase(),
+        episodeInfo.imdbId,
+        episodeInfo.season,
+        episodeInfo.episode
+      ]);
+      
+      if (checkRes.rowCount > 0) {
+        // Update existing file
+        const updateQuery = `
+          UPDATE files
+          SET file_index = $1,
+              title = $2
+          WHERE info_hash = $3 
+            AND imdb_id = $4 
+            AND imdb_season = $5 
+            AND imdb_episode = $6
+        `;
+        const res = await pool.query(updateQuery, [
+          fileIndex,
+          fileName,
+          infoHash.toLowerCase(),
+          episodeInfo.imdbId,
+          episodeInfo.season,
+          episodeInfo.episode
+        ]);
+        console.log(`✅ [DB] Updated file in 'files' table: ${fileName} (rowCount=${res.rowCount})`);
+        return res.rowCount > 0;
+      } else {
+        // Insert new file
+        const insertQuery = `
+          INSERT INTO files (info_hash, file_index, title, imdb_id, imdb_season, imdb_episode)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (info_hash, file_index) DO UPDATE 
+          SET title = EXCLUDED.title,
+              imdb_id = EXCLUDED.imdb_id,
+              imdb_season = EXCLUDED.imdb_season,
+              imdb_episode = EXCLUDED.imdb_episode
+        `;
+        const res = await pool.query(insertQuery, [
+          infoHash.toLowerCase(),
+          fileIndex,
+          fileName,
+          episodeInfo.imdbId,
+          episodeInfo.season,
+          episodeInfo.episode
+        ]);
+        console.log(`✅ [DB] Inserted file into 'files' table: ${fileName} (rowCount=${res.rowCount})`);
+        return res.rowCount > 0;
+      }
     } else {
-      console.warn(`⚠️ [DB] No torrent found with hash ${infoHash.toLowerCase()} - torrent might not be in DB yet`);
-      return false;
+      // Fallback: update torrents table (for movies or when episode info not available)
+      const query = `
+        UPDATE torrents
+        SET file_index = $1,
+            file_title = $2
+        WHERE info_hash = $3
+      `;
+      
+      const res = await pool.query(query, [fileIndex, fileName, infoHash.toLowerCase()]);
+      console.log(`✅ [DB] Updated torrents table: ${fileName} (rowCount=${res.rowCount})`);
+      
+      return res.rowCount > 0;
     }
     
   } catch (error) {
