@@ -415,7 +415,7 @@ async function updateTorrentFileInfo(infoHash, fileIndex, filePath, episodeInfo 
       ]);
       
       if (checkRes.rowCount > 0) {
-        // Update existing file
+        // Record already exists for this episode - just update the title if needed
         const updateQuery = `
           UPDATE files
           SET file_index = $1,
@@ -436,15 +436,23 @@ async function updateTorrentFileInfo(infoHash, fileIndex, filePath, episodeInfo 
         console.log(`✅ [DB] Updated file in 'files' table: ${fileName} (rowCount=${res.rowCount})`);
         return res.rowCount > 0;
       } else {
+        // Check if this (hash, fileIndex) combo exists for a DIFFERENT episode
+        const conflictCheck = await pool.query(
+          'SELECT imdb_season, imdb_episode FROM files WHERE info_hash = $1 AND file_index = $2',
+          [infoHash.toLowerCase(), fileIndex]
+        );
+        
+        if (conflictCheck.rowCount > 0) {
+          // This fileIndex is already used for a different episode - skip to avoid conflict
+          const existing = conflictCheck.rows[0];
+          console.log(`⚠️ [DB] FileIndex ${fileIndex} already used for S${existing.imdb_season}E${existing.imdb_episode}, skipping S${episodeInfo.season}E${episodeInfo.episode}`);
+          return false;
+        }
+        
         // Insert new file
         const insertQuery = `
           INSERT INTO files (info_hash, file_index, title, imdb_id, imdb_season, imdb_episode)
           VALUES ($1, $2, $3, $4, $5, $6)
-          ON CONFLICT (info_hash, file_index) DO UPDATE 
-          SET title = EXCLUDED.title,
-              imdb_id = EXCLUDED.imdb_id,
-              imdb_season = EXCLUDED.imdb_season,
-              imdb_episode = EXCLUDED.imdb_episode
         `;
         const res = await pool.query(insertQuery, [
           infoHash.toLowerCase(),
