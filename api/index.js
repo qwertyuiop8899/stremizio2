@@ -1204,6 +1204,27 @@ class RealDebrid {
         this.baseUrl = 'https://api.real-debrid.com/rest/1.0';
     }
 
+    // 🔥 Torrentio-style Error Handlers
+    _isAccessDeniedError(error) {
+        return error && [9, 12, 13, 18].includes(error.error_code);
+    }
+
+    _isInfringingFileError(error) {
+        return error && [20, 29].includes(error.error_code);
+    }
+
+    _isLimitExceededError(error) {
+        return error && error.error_code === 31;
+    }
+
+    _isTorrentTooBigError(error) {
+        return error && error.error_code === 32;
+    }
+
+    _isFailedDownloadError(error) {
+        return error && [16, 19, 21, 22, 23, 25, 26, 27].includes(error.error_code);
+    }
+
     async checkCache(hashes) {
         if (!hashes || hashes.length === 0) return {};
         
@@ -1296,7 +1317,33 @@ class RealDebrid {
         return results;
     }
 
-    async addMagnet(magnetLink) {
+    // 🔥 Torrentio-style: Find Existing Torrent (evita duplicati)
+    async _findExistingTorrent(infoHash) {
+        try {
+            const response = await fetch(`${this.baseUrl}/torrents`, {
+                headers: { 'Authorization': `Bearer ${this.apiKey}` }
+            });
+            
+            if (!response.ok) return null;
+            
+            const torrents = await response.json();
+            const existing = torrents.find(t => 
+                t.hash && t.hash.toLowerCase() === infoHash.toLowerCase() && 
+                t.status !== 'error'
+            );
+            
+            if (existing) {
+                console.log(`♻️ [RD] Reusing existing torrent: ${existing.id} (${existing.status})`);
+            }
+            
+            return existing;
+        } catch (error) {
+            console.warn(`⚠️ Failed to check existing torrents: ${error.message}`);
+            return null;
+        }
+    }
+
+    async addMagnet(magnetLink, force = false) {
         const formData = new FormData();
         formData.append('magnet', magnetLink);
 
@@ -1309,10 +1356,38 @@ class RealDebrid {
         });
 
         if (!response.ok) {
-            throw new Error(`Real-Debrid API error: ${response.status}`);
+            const errorData = await response.json().catch(() => ({}));
+            throw errorData; // Return full error object for retry logic
         }
 
         return await response.json();
+    }
+
+    // 🔥 Torrentio-style: Retry with force flag on failure
+    async _retryCreateTorrent(infoHash, magnetLink) {
+        try {
+            console.log(`🔄 [RD] Retrying torrent creation with force flag...`);
+            
+            // Delete any existing error torrents
+            const torrents = await this.getTorrents();
+            const errorTorrents = torrents.filter(t => 
+                t.hash && t.hash.toLowerCase() === infoHash.toLowerCase() && 
+                t.status === 'error'
+            );
+            
+            for (const torrent of errorTorrents) {
+                await this.deleteTorrent(torrent.id);
+                console.log(`🗑️ [RD] Deleted error torrent: ${torrent.id}`);
+            }
+            
+            // Retry with force flag (if RD API supports it)
+            const result = await this.addMagnet(magnetLink, true);
+            console.log(`✅ [RD] Retry successful: ${result.id}`);
+            return result;
+        } catch (retryError) {
+            console.error(`❌ [RD] Retry failed:`, retryError);
+            throw retryError;
+        }
     }
 
     async getTorrents() {
@@ -2841,8 +2916,16 @@ async function handleStream(type, id, config, workerOrigin) {
                         cacheInfoText = '📥🧲 Aggiungi a Real-Debrid (download necessario)';
                     }
                     
+                    // 🔥 Torrentio-style: Show "Pack Name / File Name" for series with fileIndex
+                    let displayTitle = result.title;
+                    if (type === 'series' && season && episode && result.filename && result.fileIndex) {
+                        // Extract just the filename (remove path)
+                        const fileName = result.filename.split('/').pop().split('\\').pop();
+                        displayTitle = `${result.title}\n📂 ${fileName}`;
+                    }
+                    
                     const streamTitle = [
-                        `🎬 ${result.title}`,
+                        `🎬 ${displayTitle}`,
                         `📡 ${result.source} | 💾 ${result.size} | 👥 ${result.seeders || 0} seeds`,
                         cacheInfoText,
                         result.categories?.[0] ? `📂 ${result.categories[0]}` : '',
@@ -2917,8 +3000,15 @@ async function handleStream(type, id, config, workerOrigin) {
                         cacheInfoText = '📥🧲 Aggiungi a Torbox';
                     }
                     
+                    // 🔥 Torrentio-style: Show "Pack Name / File Name" for series with fileIndex
+                    let displayTitle = result.title;
+                    if (type === 'series' && season && episode && result.filename && result.fileIndex) {
+                        const fileName = result.filename.split('/').pop().split('\\').pop();
+                        displayTitle = `${result.title}\n📂 ${fileName}`;
+                    }
+                    
                     const streamTitle = [
-                        `🎬 ${result.title}`,
+                        `🎬 ${displayTitle}`,
                         `📡 ${result.source} | 💾 ${result.size} | 👥 ${result.seeders || 0} seeds`,
                         cacheInfoText,
                         result.categories?.[0] ? `📂 ${result.categories[0]}` : '',
@@ -2983,8 +3073,15 @@ async function handleStream(type, id, config, workerOrigin) {
                         cacheInfoText = '📥🧲 Aggiungi a AllDebrid';
                     }
                     
+                    // 🔥 Torrentio-style: Show "Pack Name / File Name" for series with fileIndex
+                    let displayTitle = result.title;
+                    if (type === 'series' && season && episode && result.filename && result.fileIndex) {
+                        const fileName = result.filename.split('/').pop().split('\\').pop();
+                        displayTitle = `${result.title}\n📂 ${fileName}`;
+                    }
+                    
                     const streamTitle = [
-                        `🎬 ${result.title}`,
+                        `🎬 ${displayTitle}`,
                         `📡 ${result.source} | 💾 ${result.size} | 👥 ${result.seeders || 0} seeds`,
                         cacheInfoText,
                         result.categories?.[0] ? `📂 ${result.categories[0]}` : '',
@@ -3426,11 +3523,31 @@ export default async function handler(req, res) {
                 
                 console.log(`[RealDebrid] Resolving ${infoHash}`);
                 
-                // STEP 1: Add magnet directly (RD will recognize if it's cached)
-                // This avoids getTorrents() which causes 429 rate limits
-                console.log(`[RealDebrid] Adding magnet (will use cache if available)`);
-                const addResponse = await realdebrid.addMagnet(magnetLink);
-                const torrentId = addResponse.id;
+                // 🔥 STEP 0: Check if torrent already exists (Torrentio-style reuse)
+                const existingTorrent = await realdebrid._findExistingTorrent(infoHash);
+                let torrentId;
+                
+                if (existingTorrent && existingTorrent.status !== 'error') {
+                    torrentId = existingTorrent.id;
+                    console.log(`♻️ [RD] Using existing torrent: ${torrentId} (status: ${existingTorrent.status})`);
+                } else {
+                    // STEP 1: Add magnet (RD will use cache if available)
+                    console.log(`[RealDebrid] Adding new magnet...`);
+                    try {
+                        const addResponse = await realdebrid.addMagnet(magnetLink);
+                        torrentId = addResponse.id;
+                    } catch (addError) {
+                        // 🔥 Torrentio-style retry on failure
+                        if (addError.error_code === 19) { // Hoster unavailable
+                            console.warn(`⚠️ [RD] Hoster unavailable (error 19), retrying...`);
+                            const retryResponse = await realdebrid._retryCreateTorrent(infoHash, magnetLink);
+                            torrentId = retryResponse.id;
+                        } else {
+                            throw addError;
+                        }
+                    }
+                }
+                
                 if (!torrentId) throw new Error('Failed to get torrent ID');
                 
                 // STEP 2: Get torrent info
@@ -3617,6 +3734,36 @@ export default async function handler(req, res) {
                     
                     const unrestricted = await realdebrid.unrestrictLink(downloadLink);
                     
+                    // 🔥 Torrentio-style: Check for access denied errors
+                    if (realdebrid._isAccessDeniedError(unrestricted)) {
+                        console.log(`[RealDebrid] ❌ Access denied (error ${unrestricted.error_code})`);
+                        return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/access_denied_v2.mp4`);
+                    }
+                    
+                    // 🔥 Torrentio-style: Check for infringing file errors
+                    if (realdebrid._isInfringingFileError(unrestricted)) {
+                        console.log(`[RealDebrid] ❌ Infringing file (error ${unrestricted.error_code})`);
+                        return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/infringing_file_v2.mp4`);
+                    }
+                    
+                    // 🔥 Torrentio-style: Check for limit exceeded
+                    if (realdebrid._isLimitExceededError(unrestricted)) {
+                        console.log(`[RealDebrid] ❌ Limit exceeded (error ${unrestricted.error_code})`);
+                        return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/limit_exceeded_v2.mp4`);
+                    }
+                    
+                    // 🔥 Torrentio-style: Check for torrent too big
+                    if (realdebrid._isTorrentTooBigError(unrestricted)) {
+                        console.log(`[RealDebrid] ❌ Torrent too big (error ${unrestricted.error_code})`);
+                        return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/torrent_too_big_v2.mp4`);
+                    }
+                    
+                    // 🔥 Torrentio-style: Check for failed download
+                    if (realdebrid._isFailedDownloadError(unrestricted)) {
+                        console.log(`[RealDebrid] ❌ Failed download (error ${unrestricted.error_code})`);
+                        return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/download_failed_v2.mp4`);
+                    }
+                    
                     // ✅ CACHE SUCCESS: Mark torrent as cached in DB (5-day TTL)
                     if (dbEnabled && infoHash) {
                         try {
@@ -3676,7 +3823,35 @@ export default async function handler(req, res) {
             } catch (error) {
                 console.error('🔵 ❌ RD stream error:', error);
                 
-                // Handle specific errors with placeholder videos (like Torrentio)
+                // 🔥 Torrentio-style: Check for specific error codes
+                const realdebrid = new RealDebrid(userConfig.rd_key || '');
+                
+                if (realdebrid._isAccessDeniedError(error)) {
+                    console.log(`[RealDebrid] ❌ Access denied (error ${error.error_code})`);
+                    return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/access_denied_v2.mp4`);
+                }
+                
+                if (realdebrid._isInfringingFileError(error)) {
+                    console.log(`[RealDebrid] ❌ Infringing file (error ${error.error_code})`);
+                    return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/infringing_file_v2.mp4`);
+                }
+                
+                if (realdebrid._isLimitExceededError(error)) {
+                    console.log(`[RealDebrid] ❌ Limit exceeded (error ${error.error_code})`);
+                    return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/limit_exceeded_v2.mp4`);
+                }
+                
+                if (realdebrid._isTorrentTooBigError(error)) {
+                    console.log(`[RealDebrid] ❌ Torrent too big (error ${error.error_code})`);
+                    return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/torrent_too_big_v2.mp4`);
+                }
+                
+                if (realdebrid._isFailedDownloadError(error)) {
+                    console.log(`[RealDebrid] ❌ Failed download (error ${error.error_code})`);
+                    return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/download_failed_v2.mp4`);
+                }
+                
+                // Handle text-based error messages (legacy)
                 const errorMsg = error.message?.toLowerCase() || '';
                 
                 if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
