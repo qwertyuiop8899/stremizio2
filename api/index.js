@@ -1932,20 +1932,26 @@ async function enrichDatabaseInBackground(mediaDetails, type, season = null, epi
     try {
         console.log(`🔄 [Background] Starting CorsaroNero enrichment for: ${mediaDetails.title}`);
         console.log(`🔄 [Background] CODE VERSION: 2024-11-15-v2 (Italian title support)`);
+        console.log(`🔄 [Background] Input: imdbId=${mediaDetails.imdbId}, tmdbId=${mediaDetails.tmdbId}, type=${type}`);
         
         // If we have IMDB but not TMDB, try to get TMDB ID
         if (mediaDetails.imdbId && !mediaDetails.tmdbId) {
             try {
+                console.log(`🔄 [Background] Converting IMDb to TMDb...`);
                 const tmdbKey = process.env.TMDB_KEY || '5462f78469f3d80bf520164529.4c16e4';
                 const tmdbData = await getTMDBDetailsByImdb(mediaDetails.imdbId, tmdbKey);
                 if (tmdbData && tmdbData.tmdbId) {
                     mediaDetails.tmdbId = tmdbData.tmdbId;
                     console.log(`🔄 [Background] Enriched TMDB ID: ${tmdbData.tmdbId} from IMDB: ${mediaDetails.imdbId}`);
+                } else {
+                    console.warn(`⚠️ [Background] TMDb conversion returned no data`);
                 }
             } catch (error) {
-                console.warn(`⚠️ [Background] Could not enrich TMDB ID:`, error.message);
+                console.error(`❌ [Background] Error in TMDb conversion:`, error);
             }
         }
+        
+        console.log(`🔄 [Background] After IMDb conversion: tmdbId=${mediaDetails.tmdbId}`);
         
         // �🇹 Get ITALIAN title and ORIGINAL title from TMDB (critical for Italian content!)
         let italianTitle = null;
@@ -1978,8 +1984,13 @@ async function enrichDatabaseInBackground(mediaDetails, type, season = null, epi
                 }
             } catch (error) {
                 console.warn(`⚠️ [Background] Could not fetch titles:`, error.message);
+                console.error(`❌ [Background] Title fetch error details:`, error);
             }
+        } else {
+            console.warn(`⚠️ [Background] No TMDb ID available, cannot fetch Italian title`);
         }
+        
+        console.log(`🔄 [Background] Title fetching complete. Italian: "${italianTitle}", Original: "${originalTitle}"`);
         
         // Build search queries (ENGLISH + ITALIAN + ORIGINAL)
         const searchQueries = [];
