@@ -385,10 +385,16 @@ async function updateTorrentFileInfo(infoHash, fileIndex, filePath) {
   
   try {
     console.log(`💾 [DB updateTorrentFileInfo] Input: hash=${infoHash}, fileIndex=${fileIndex}, filePath=${filePath}`);
+    console.log(`💾 [DB updateTorrentFileInfo] Pool status: host=${pool.options.host}, database=${pool.options.database}, connected=${pool.totalCount}`);
     
     // Extract just the filename from path
     const fileName = filePath.split('/').pop().split('\\').pop();
     console.log(`💾 [DB updateTorrentFileInfo] Extracted filename: ${fileName}`);
+    
+    // First, verify the torrent exists
+    const checkQuery = `SELECT info_hash, title, file_index, file_title FROM torrents WHERE info_hash = $1`;
+    const checkRes = await pool.query(checkQuery, [infoHash.toLowerCase()]);
+    console.log(`💾 [DB updateTorrentFileInfo] Pre-update check: found=${checkRes.rowCount} rows`, checkRes.rows[0] || 'NOT FOUND');
     
     const query = `
       UPDATE torrents
@@ -397,11 +403,15 @@ async function updateTorrentFileInfo(infoHash, fileIndex, filePath) {
       WHERE info_hash = $3
     `;
     
-    console.log(`💾 [DB updateTorrentFileInfo] Executing query with: fileIndex=${fileIndex}, fileName=${fileName}, hash=${infoHash.toLowerCase()}`);
+    console.log(`💾 [DB updateTorrentFileInfo] Executing UPDATE with: fileIndex=${fileIndex}, fileName=${fileName}, hash=${infoHash.toLowerCase()}`);
     
     const res = await pool.query(query, [fileIndex, fileName, infoHash.toLowerCase()]);
     
-    console.log(`💾 [DB updateTorrentFileInfo] Query result: rowCount=${res.rowCount}`);
+    console.log(`💾 [DB updateTorrentFileInfo] UPDATE result: rowCount=${res.rowCount}`);
+    
+    // Verify the update worked
+    const verifyRes = await pool.query(checkQuery, [infoHash.toLowerCase()]);
+    console.log(`💾 [DB updateTorrentFileInfo] Post-update verification:`, verifyRes.rows[0] || 'NOT FOUND');
     
     if (res.rowCount > 0) {
       console.log(`✅ [DB] Updated file info for ${infoHash}: fileIndex=${fileIndex}, filename=${fileName}`);
