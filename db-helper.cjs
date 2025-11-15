@@ -486,6 +486,22 @@ async function updateTorrentFileInfo(infoHash, fileIndex, filePath, episodeInfo 
   }
 }
 
+/**
+ * Delete all file entries for a specific torrent hash
+ * Used when re-adding a torrent to clean up old file selections
+ */
+async function deleteFileInfo(infoHash) {
+  try {
+    const query = `DELETE FROM files WHERE info_hash = $1`;
+    const res = await pool.query(query, [infoHash.toLowerCase()]);
+    console.log(`✅ [DB] Deleted ${res.rowCount} file entries for hash ${infoHash}`);
+    return res.rowCount;
+  } catch (error) {
+    console.error(`❌ [DB] Error deleting file info:`, error.message);
+    return 0;
+  }
+}
+
 module.exports = {
   initDatabase,
   searchByImdbId,
@@ -496,5 +512,6 @@ module.exports = {
   getRdCachedAvailability,
   batchInsertTorrents,
   updateTorrentFileInfo, // NEW
+  deleteFileInfo, // NEW
   closeDatabase
 };
