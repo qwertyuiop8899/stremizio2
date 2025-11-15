@@ -3685,28 +3685,28 @@ export default async function handler(req, res) {
                 
                 console.log(`[RealDebrid] Resolving ${infoHash}`);
                 
-                // 🔥 NO TORRENT REUSE - Always add fresh to avoid wrong episode selection
+                // 🔥 SMART REUSE: Use existing torrent but ensure ALL files are selected
                 let torrentId;
+                const existingTorrent = await realdebrid._findExistingTorrent(infoHash);
                 
-                // STEP 1: Add magnet (RD will use cache if available)
-                console.log(`[RealDebrid] Adding new magnet (no reuse)...`);
-                try {
-                    const addResponse = await realdebrid.addMagnet(magnetLink);
-                    torrentId = addResponse.id;
-                } catch (addError) {
-                    // 🔥 Handle error 19: torrent already exists
-                    if (addError.error_code === 19) {
-                        console.log(`[RealDebrid] Torrent already exists, deleting and re-adding for fresh file selection...`);
-                        const existingTorrent = await realdebrid._findExistingTorrent(infoHash);
-                        if (existingTorrent) {
-                            await realdebrid.deleteTorrent(existingTorrent.id);
-                            console.log(`[RealDebrid] Deleted old torrent ${existingTorrent.id}`);
+                if (existingTorrent && existingTorrent.status !== 'error') {
+                    torrentId = existingTorrent.id;
+                    console.log(`♻️ [RD] Reusing existing torrent: ${torrentId} (status: ${existingTorrent.status})`);
+                } else {
+                    // STEP 1: Add magnet (RD will use cache if available)
+                    console.log(`[RealDebrid] Adding new magnet...`);
+                    try {
+                        const addResponse = await realdebrid.addMagnet(magnetLink);
+                        torrentId = addResponse.id;
+                    } catch (addError) {
+                        // 🔥 Handle error 19: torrent already exists
+                        if (addError.error_code === 19) {
+                            console.log(`[RealDebrid] Error 19: torrent already added, finding existing...`);
+                            const retryTorrent = await realdebrid._findExistingTorrent(infoHash);
+                            if (retryTorrent) torrentId = retryTorrent.id;
+                        } else {
+                            throw addError;
                         }
-                        // Retry add
-                        const retryResponse = await realdebrid.addMagnet(magnetLink);
-                        torrentId = retryResponse.id;
-                    } else {
-                        throw addError;
                     }
                 }
                 
@@ -3834,6 +3834,12 @@ export default async function handler(req, res) {
                     const junkKeywords = ['sample', 'trailer', 'extra', 'bonus', 'extras'];
                     
                     const selectedFiles = (torrent.files || []).filter(file => file.selected === 1);
+                    const allVideoFiles = (torrent.files || []).filter(file => {
+                        const lowerPath = file.path.toLowerCase();
+                        return videoExtensions.some(ext => lowerPath.endsWith(ext)) &&
+                               (!junkKeywords.some(junk => lowerPath.includes(junk)) || file.bytes > 250 * 1024 * 1024);
+                    });
+                    
                     const videos = selectedFiles
                         .filter(file => {
                             const lowerPath = file.path.toLowerCase();
@@ -3844,6 +3850,33 @@ export default async function handler(req, res) {
                             return !junkKeywords.some(junk => lowerPath.includes(junk)) || file.bytes > 250 * 1024 * 1024;
                         })
                         .sort((a, b) => b.bytes - a.bytes);
+                    
+                    // 🔥 CRITICAL FIX: If series pack has incomplete file selection, add missing files
+                    if (type === 'series' && videos.length < allVideoFiles.length && allVideoFiles.length > 1) {
+                        console.log(`⚠️ [RD] Incomplete file selection: ${videos.length}/${allVideoFiles.length} videos selected`);
+                        console.log(`🔄 [RD] Adding ${allVideoFiles.length - videos.length} missing video files...`);
+                        
+                        const allVideoIds = allVideoFiles.map(f => f.id).join(',');
+                        await realdebrid.selectFiles(torrent.id, allVideoIds);
+                        
+                        // Re-fetch torrent info with updated selection
+                        torrent = await realdebrid.getTorrentInfo(torrent.id);
+                        console.log(`✅ [RD] Updated file selection: ${allVideoFiles.length} videos now selected`);
+                        
+                        // Refresh videos list
+                        const updatedSelectedFiles = (torrent.files || []).filter(file => file.selected === 1);
+                        videos.length = 0; // Clear array
+                        videos.push(...updatedSelectedFiles
+                            .filter(file => {
+                                const lowerPath = file.path.toLowerCase();
+                                return videoExtensions.some(ext => lowerPath.endsWith(ext));
+                            })
+                            .filter(file => {
+                                const lowerPath = file.path.toLowerCase();
+                                return !junkKeywords.some(junk => lowerPath.includes(junk)) || file.bytes > 250 * 1024 * 1024;
+                            })
+                            .sort((a, b) => b.bytes - a.bytes));
+                    }
                     
                     let targetFile = null;
                     
