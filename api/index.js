@@ -117,7 +117,7 @@ function parseSize(sizeStr) {
         'TB': 1024 ** 4, 'TIB': 1024 ** 4
     };
     
-    return cleanValue * (multipliers[unit.toUpperCase()] || 1);
+    return Math.round(cleanValue * (multipliers[unit.toUpperCase()] || 1));
 }
 
 // ✅ Formattazione dimensione file
