@@ -1927,6 +1927,105 @@ async function getTMDBDetailsByImdb(imdbId, tmdbApiKey) {
     }
 }
 
+// 🔥 NEW: Background CorsaroNero enrichment - populates DB without blocking user response
+async function enrichDatabaseInBackground(mediaDetails, type, season = null, episode = null, dbHelper) {
+    try {
+        console.log(`🔄 [Background] Starting CorsaroNero enrichment for: ${mediaDetails.title}`);
+        
+        // If we have IMDB but not TMDB, try to get TMDB ID
+        if (mediaDetails.imdbId && !mediaDetails.tmdbId) {
+            try {
+                const tmdbData = await getDetailsFromIMDB(mediaDetails.imdbId);
+                if (tmdbData && tmdbData.tmdbId) {
+                    mediaDetails.tmdbId = tmdbData.tmdbId;
+                    console.log(`🔄 [Background] Enriched TMDB ID: ${tmdbData.tmdbId} from IMDB: ${mediaDetails.imdbId}`);
+                }
+            } catch (error) {
+                console.warn(`⚠️ [Background] Could not enrich TMDB ID:`, error.message);
+            }
+        }
+        
+        // Build search queries
+        const searchQueries = [];
+        if (type === 'series') {
+            const seasonStr = season ? String(season).padStart(2, '0') : '';
+            searchQueries.push(`${mediaDetails.title} S${seasonStr}`); // Season pack
+            searchQueries.push(`${mediaDetails.title} Stagione ${season}`); // Italian
+            searchQueries.push(`${mediaDetails.title} Season ${season}`); // English
+        } else {
+            searchQueries.push(`${mediaDetails.title} ${mediaDetails.year || ''}`);
+        }
+        
+        console.log(`🔄 [Background] Search queries:`, searchQueries);
+        
+        // Search CorsaroNero (IT focus)
+        const corsaroResults = [];
+        for (const query of searchQueries) {
+            try {
+                console.log(`🔄 [Background] Searching CorsaroNero for: "${query}"`);
+                const results = await searchCorsaroNero(query.trim());
+                corsaroResults.push(...results);
+                console.log(`🔄 [Background] CorsaroNero: ${results.length} results for "${query}"`);
+            } catch (error) {
+                console.warn(`⚠️ [Background] CorsaroNero search failed for "${query}":`, error.message);
+            }
+        }
+        
+        console.log(`🔄 [Background] Total CorsaroNero results: ${corsaroResults.length}`);
+        
+        if (corsaroResults.length === 0) {
+            console.log(`🔄 [Background] No new results from CorsaroNero`);
+            return;
+        }
+        
+        // Prepare DB inserts
+        const torrentsToInsert = [];
+        for (const result of corsaroResults) {
+            if (!result.infoHash || result.infoHash.length < 32) {
+                console.log(`⚠️ [Background] Skipping torrent with invalid hash: ${result.title}`);
+                continue;
+            }
+            
+            // Extract IMDB ID from title if available (pattern: tt1234567)
+            const imdbMatch = result.title.match(/tt\d{7,8}/i);
+            const imdbId = imdbMatch ? imdbMatch[0] : (mediaDetails.imdbId || null);
+            
+            torrentsToInsert.push({
+                info_hash: result.infoHash.toLowerCase(),
+                provider: 'CorsaroNero',
+                title: result.title,
+                size: result.sizeInBytes || 0,
+                type: type,
+                upload_date: new Date().toISOString(),
+                seeders: result.seeders || 0,
+                imdb_id: imdbId, // From title or mediaDetails
+                tmdb_id: mediaDetails.tmdbId || null,
+                cached_rd: null, // Unknown cache status (will be checked on first play)
+                last_cached_check: null,
+                file_index: null // Will be populated on first play
+            });
+        }
+        
+        console.log(`🔄 [Background] Prepared ${torrentsToInsert.length}/${corsaroResults.length} torrents for insertion`);
+        
+        if (torrentsToInsert.length === 0) {
+            console.log(`🔄 [Background] No valid torrents to insert`);
+            return;
+        }
+        
+        // Insert into DB (batch insert)
+        try {
+            const insertedCount = await dbHelper.batchInsertTorrents(torrentsToInsert);
+            console.log(`✅ [Background] Successfully inserted ${insertedCount} new torrents into DB`);
+        } catch (error) {
+            console.warn(`⚠️ [Background] Failed to insert torrents:`, error.message);
+        }
+        
+    } catch (error) {
+        console.error(`❌ [Background] Enrichment failed:`, error);
+    }
+}
+
 async function getKitsuDetails(kitsuId) {
     try {
         const response = await fetch(`https://kitsu.io/api/edge/anime/${kitsuId}`);
@@ -2658,6 +2757,11 @@ async function handleStream(type, id, config, workerOrigin) {
                     source: `💾 ${dbResult.provider || 'Database'}`,
                     fileIndex: dbResult.file_index || undefined // For series episodes
                 });
+                
+                // DEBUG: Log file info from DB
+                if (dbResult.file_index || dbResult.file_title) {
+                    console.log(`🔍 [DB DEBUG] Torrent has file info: fileIndex=${dbResult.file_index}, file_title=${dbResult.file_title}`);
+                }
             }
             
             console.log(`💾 [DB] Total raw results after DB merge: ${allRawResults.length}`);
@@ -3205,6 +3309,18 @@ async function handleStream(type, id, config, workerOrigin) {
         
         console.log(`🎉 Successfully processed ${streams.length} streams in ${totalTime}ms`);
         console.log(`⚡ ${cachedCount} cached streams available for instant playback`);
+        
+        // 🔥 BACKGROUND TASK: Enrich database with CorsaroNero results (non-blocking)
+        console.log(`🔍 [Background Check] dbEnabled=${dbEnabled}, mediaDetails=${!!mediaDetails}, tmdbId=${mediaDetails?.tmdbId}, imdbId=${mediaDetails?.imdbId}`);
+        
+        if (dbEnabled && mediaDetails && (mediaDetails.tmdbId || mediaDetails.imdbId)) {
+            console.log(`🚀 [Background] Triggering enrichment for: ${mediaDetails.title}`);
+            enrichDatabaseInBackground(mediaDetails, type, season, episode, dbHelper).catch(err => {
+                console.warn(`⚠️ [Background] Enrichment failed (non-critical):`, err.message);
+            });
+        } else {
+            console.log(`⏭️  [Background] Enrichment skipped (dbEnabled=${dbEnabled}, hasMediaDetails=${!!mediaDetails}, hasIds=${!!(mediaDetails?.tmdbId || mediaDetails?.imdbId)})`);
+        }
         
         return { 
             streams,
@@ -3765,12 +3881,24 @@ export default async function handler(req, res) {
                     }
                     
                     // ✅ CACHE SUCCESS: Mark torrent as cached in DB (5-day TTL)
+                    // ✅ SAVE FILE INFO: Save file_index and file_title for future lookups
                     if (dbEnabled && infoHash) {
                         try {
+                            // Update cache status
                             await dbHelper.updateRdCacheStatus([{ hash: infoHash, cached: true }]);
                             console.log(`💾 [DB] Marked ${infoHash} as RD cached (5-day TTL)`);
+                            
+                            // Save file info (fileIndex + filename) for series episodes
+                            if (type === 'series' && season && episode && targetFile) {
+                                await dbHelper.updateTorrentFileInfo(
+                                    infoHash, 
+                                    targetFile.id, // RD file.id (1-based)
+                                    targetFile.path // Full path with filename
+                                );
+                                console.log(`💾 [DB] Saved file info: fileIndex=${targetFile.id}, filename=${targetFile.path.split('/').pop()}`);
+                            }
                         } catch (dbErr) {
-                            console.warn(`⚠️ Failed to update DB cache status: ${dbErr.message}`);
+                            console.warn(`⚠️ Failed to update DB: ${dbErr.message}`);
                         }
                     }
                     
