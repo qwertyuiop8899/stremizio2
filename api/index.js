@@ -2751,7 +2751,11 @@ async function handleStream(type, id, config, workerOrigin) {
                 // 4. ✅ NUOVA QUERY: "Season XX" in inglese
                 searchQueries.push(`${mediaDetails.title} Season ${season}`);
                 
-                // 5. Fallback: solo il titolo (per pack multi-stagione)
+                // 5. ✅ NUOVA QUERY: Complete pack per trovare S01-S10, S01-S07, etc
+                searchQueries.push(`${mediaDetails.title} Complete`);
+                searchQueries.push(`${mediaDetails.title} S01`);
+                
+                // 6. Fallback: solo il titolo (per pack multi-stagione)
                 searchQueries.push(mediaDetails.title);
             }
         } else { // Movie
