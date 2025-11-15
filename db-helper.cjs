@@ -502,6 +502,31 @@ async function deleteFileInfo(infoHash) {
   }
 }
 
+/**
+ * Get IMDb ID for a torrent by its info hash
+ * @param {string} infoHash - Torrent info hash
+ * @returns {Promise<string|null>} IMDb ID or null if not found
+ */
+async function getImdbIdByHash(infoHash) {
+  if (!pool) throw new Error('Database not initialized');
+  
+  try {
+    const query = 'SELECT imdb_id FROM torrents WHERE info_hash = $1 LIMIT 1';
+    const result = await pool.query(query, [infoHash.toLowerCase()]);
+    
+    if (result.rows.length > 0 && result.rows[0].imdb_id) {
+      console.log(`✅ [DB] Found imdb_id ${result.rows[0].imdb_id} for hash ${infoHash}`);
+      return result.rows[0].imdb_id;
+    }
+    
+    console.log(`⚠️ [DB] No imdb_id found for hash ${infoHash}`);
+    return null;
+  } catch (error) {
+    console.error(`❌ [DB] Error fetching imdb_id:`, error.message);
+    return null;
+  }
+}
+
 module.exports = {
   initDatabase,
   searchByImdbId,
@@ -511,7 +536,8 @@ module.exports = {
   updateRdCacheStatus,
   getRdCachedAvailability,
   batchInsertTorrents,
-  updateTorrentFileInfo, // NEW
-  deleteFileInfo, // NEW
+  updateTorrentFileInfo,
+  deleteFileInfo,
+  getImdbIdByHash, // NEW
   closeDatabase
 };
