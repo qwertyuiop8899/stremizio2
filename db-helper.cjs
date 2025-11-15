@@ -315,6 +315,108 @@ async function closeDatabase() {
   }
 }
 
+/**
+ * Batch insert torrents into DB (skip duplicates)
+ * @param {Array} torrents - Array of torrent objects
+ * @returns {Promise<number>} Number of inserted torrents
+ */
+async function batchInsertTorrents(torrents) {
+  if (!pool) throw new Error('Database not initialized');
+  if (!torrents || torrents.length === 0) return 0;
+  
+  try {
+    let inserted = 0;
+    
+    for (const torrent of torrents) {
+      try {
+        const query = `
+          INSERT INTO torrents (
+            info_hash, provider, title, size, type, upload_date, 
+            seeders, imdb_id, tmdb_id, cached_rd, last_cached_check, file_index
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          ON CONFLICT (info_hash) DO NOTHING
+        `;
+        
+        const values = [
+          torrent.info_hash,
+          torrent.provider,
+          torrent.title,
+          torrent.size,
+          torrent.type,
+          torrent.upload_date,
+          torrent.seeders,
+          torrent.imdb_id,
+          torrent.tmdb_id,
+          torrent.cached_rd,
+          torrent.last_cached_check,
+          torrent.file_index
+        ];
+        
+        const res = await pool.query(query, values);
+        if (res.rowCount > 0) inserted++;
+        
+      } catch (error) {
+        // Skip duplicates silently
+        if (!error.message.includes('duplicate key')) {
+          console.warn(`⚠️ [DB] Failed to insert torrent ${torrent.info_hash}:`, error.message);
+        }
+      }
+    }
+    
+    console.log(`✅ [DB] Batch insert: ${inserted}/${torrents.length} new torrents added`);
+    return inserted;
+    
+  } catch (error) {
+    console.error(`❌ [DB] Batch insert error:`, error.message);
+    return 0;
+  }
+}
+
+/**
+ * Update torrent file info (file_index and file_title) after playing
+ * @param {string} infoHash - Torrent info hash
+ * @param {number} fileIndex - RealDebrid file.id (1-based)
+ * @param {string} filePath - Full file path (will extract filename)
+ * @returns {Promise<boolean>} Success status
+ */
+async function updateTorrentFileInfo(infoHash, fileIndex, filePath) {
+  if (!pool) throw new Error('Database not initialized');
+  
+  try {
+    console.log(`💾 [DB updateTorrentFileInfo] Input: hash=${infoHash}, fileIndex=${fileIndex}, filePath=${filePath}`);
+    
+    // Extract just the filename from path
+    const fileName = filePath.split('/').pop().split('\\').pop();
+    console.log(`💾 [DB updateTorrentFileInfo] Extracted filename: ${fileName}`);
+    
+    const query = `
+      UPDATE torrents
+      SET file_index = $1,
+          file_title = $2
+      WHERE info_hash = $3
+    `;
+    
+    console.log(`💾 [DB updateTorrentFileInfo] Executing query with: fileIndex=${fileIndex}, fileName=${fileName}, hash=${infoHash.toLowerCase()}`);
+    
+    const res = await pool.query(query, [fileIndex, fileName, infoHash.toLowerCase()]);
+    
+    console.log(`💾 [DB updateTorrentFileInfo] Query result: rowCount=${res.rowCount}`);
+    
+    if (res.rowCount > 0) {
+      console.log(`✅ [DB] Updated file info for ${infoHash}: fileIndex=${fileIndex}, filename=${fileName}`);
+      return true;
+    } else {
+      console.warn(`⚠️ [DB] No torrent found with hash ${infoHash.toLowerCase()} - torrent might not be in DB yet`);
+      return false;
+    }
+    
+  } catch (error) {
+    console.error(`❌ [DB] Error updating file info:`, error.message, error);
+    return false;
+  }
+}
+
 module.exports = {
   initDatabase,
   searchByImdbId,
@@ -323,5 +425,7 @@ module.exports = {
   insertTorrent,
   updateRdCacheStatus,
   getRdCachedAvailability,
+  batchInsertTorrents,
+  updateTorrentFileInfo, // NEW
   closeDatabase
 };
