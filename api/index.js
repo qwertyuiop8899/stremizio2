@@ -3543,7 +3543,7 @@ async function handleStream(type, id, config, workerOrigin) {
         
         if (dbEnabled && mediaDetails && (mediaDetails.tmdbId || mediaDetails.imdbId)) {
             // Filter only CorsaroNero results from the results we already found
-            const corsaroResults = results.filter(r => r.provider === 'CorsaroNero');
+            const corsaroResults = results.filter(r => r.source === 'CorsaroNero');
             console.log(`🚀 [Background] Saving ${corsaroResults.length} CorsaroNero results to DB`);
             
             if (corsaroResults.length > 0) {
