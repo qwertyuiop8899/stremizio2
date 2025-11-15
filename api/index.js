@@ -4068,17 +4068,8 @@ export default async function handler(req, res) {
                         // ✅ SAVE FILE INFO: Save file info in 'files' table for this episode
                         if (targetFile && season && episode) {
                             try {
-                                // Try to get imdbId from DB for this torrent
-                                let episodeImdbId = null;
-                                try {
-                                    const query = 'SELECT imdb_id FROM torrents WHERE info_hash = $1 LIMIT 1';
-                                    const result = await dbHelper.pool.query(query, [infoHash.toLowerCase()]);
-                                    if (result.rows.length > 0) {
-                                        episodeImdbId = result.rows[0].imdb_id;
-                                    }
-                                } catch (err) {
-                                    console.warn(`⚠️ [DB] Could not fetch imdb_id for hash ${infoHash}`);
-                                }
+                                // Get imdbId from DB for this torrent
+                                const episodeImdbId = await dbHelper.getImdbIdByHash(infoHash);
                                 
                                 const episodeInfo = {
                                     imdbId: episodeImdbId,
