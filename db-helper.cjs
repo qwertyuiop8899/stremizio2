@@ -54,7 +54,9 @@ async function searchByImdbId(imdbId, type = null) {
         imdb_id, 
         tmdb_id,
         cached_rd,
-        last_cached_check
+        last_cached_check,
+        file_index,
+        file_title
       FROM torrents 
       WHERE imdb_id = $1
     `;
@@ -101,7 +103,9 @@ async function searchByTmdbId(tmdbId, type = null) {
         imdb_id, 
         tmdb_id,
         cached_rd,
-        last_cached_check
+        last_cached_check,
+        file_index,
+        file_title
       FROM torrents 
       WHERE tmdb_id = $1
     `;
