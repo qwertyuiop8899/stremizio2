@@ -1222,8 +1222,10 @@ class RealDebrid {
                 console.log(`🔵 [RD Debug] Batch hashes: ${batch.join(', ')}`);
                 
                 const response = await fetch(url, {
+                    method: 'GET',
                     headers: {
-                        'Authorization': `Bearer ${this.apiKey}`
+                        'Authorization': `Bearer ${this.apiKey}`,
+                        'User-Agent': 'Stremio/1.0'
                     },
                     signal: AbortSignal.timeout(15000) // 15s timeout
                 });
