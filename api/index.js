@@ -2520,7 +2520,29 @@ async function handleStream(type, id, config, workerOrigin) {
         // ✅ STEP 3: If no results in DB and we have TMDb ID, try searching by TMDb
         if (dbEnabled && dbResults.length === 0 && mediaDetails.tmdbId) {
             console.log(`💾 [DB] No results by IMDb, trying TMDb ID: ${mediaDetails.tmdbId}`);
-            dbResults = await dbHelper.searchByTmdbId(mediaDetails.tmdbId, type);
+            
+            // 🔥 FIX: For series with episode info, get imdbId from TMDb first and use searchEpisodeFiles
+            if (type === 'series' && season && episode) {
+                try {
+                    // Get IMDb ID from TMDb torrents table
+                    const tmdbTorrents = await dbHelper.searchByTmdbId(mediaDetails.tmdbId, type);
+                    if (tmdbTorrents.length > 0 && tmdbTorrents[0].imdb_id) {
+                        const imdbId = tmdbTorrents[0].imdb_id;
+                        console.log(`💾 [DB] Found imdbId ${imdbId} from TMDb, searching episode files...`);
+                        dbResults = await dbHelper.searchEpisodeFiles(imdbId, parseInt(season), parseInt(episode));
+                        console.log(`💾 [DB] Found ${dbResults.length} episode files!`);
+                    } else {
+                        // Fallback: use TMDb search (won't have file_title)
+                        dbResults = tmdbTorrents;
+                    }
+                } catch (err) {
+                    console.error(`❌ [DB] Error searching episode files by TMDb:`, err.message);
+                    dbResults = await dbHelper.searchByTmdbId(mediaDetails.tmdbId, type);
+                }
+            } else {
+                // For movies or when no episode info, use regular TMDb search
+                dbResults = await dbHelper.searchByTmdbId(mediaDetails.tmdbId, type);
+            }
             
             if (dbResults.length > 0) {
                 console.log(`💾 [DB] Found ${dbResults.length} results by TMDb ID!`);
