@@ -3134,16 +3134,30 @@ async function handleStream(type, id, config, workerOrigin) {
                 movieDetails = await getTMDBDetails(mediaDetails.tmdbId, 'movie', tmdbKey);
             }
             filteredResults = filteredResults.filter(result => {
+                const torrentTitle = result.title || result.websiteTitle;
+                
+                // Try matching with English title
                 const mainTitleMatch = isExactMovieMatch(
-                    result.title || result.websiteTitle,
+                    torrentTitle,
                     mediaDetails.title,
                     mediaDetails.year
                 );
                 if (mainTitleMatch) return true;
 
+                // Try matching with Italian title
+                if (italianTitle && italianTitle !== mediaDetails.title) {
+                    const italianMatch = isExactMovieMatch(
+                        torrentTitle,
+                        italianTitle,
+                        mediaDetails.year
+                    );
+                    if (italianMatch) return true;
+                }
+
+                // Try matching with original title
                 if (movieDetails && movieDetails.original_title && movieDetails.original_title !== mediaDetails.title) {
                     return isExactMovieMatch(
-                        result.title || result.websiteTitle,
+                        torrentTitle,
                         movieDetails.original_title,
                         mediaDetails.year
                     );
