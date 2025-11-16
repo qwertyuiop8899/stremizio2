@@ -2553,8 +2553,13 @@ async function handleStream(type, id, config, workerOrigin) {
     const startTime = Date.now();
     
     try {
-        // ✅ TMDB API Key (hardcoded)
-        const tmdbKey = '5462f78469f3d80bf5201645294c16e4';
+        // ✅ TMDB API Key from config or environment variable
+        const tmdbKey = config.tmdb_key || process.env.TMDB_API_KEY;
+        
+        if (!tmdbKey) {
+            console.error('❌ TMDB API key not configured');
+            return { streams: [] };
+        }
         
         // ✅ Use debrid services factory (supports RD, Torbox, and AllDebrid)
         const debridServices = createDebridServices(config);
@@ -2657,7 +2662,7 @@ async function handleStream(type, id, config, workerOrigin) {
             // Call initDatabase WITHOUT parameters to use hardcoded fallback credentials
             dbHelper.initDatabase();
             dbEnabled = true;
-            console.log('💾 [DB] Database enabled with hardcoded credentials');
+            console.log('💾 [DB] Database connection initialized');
         } catch (error) {
             console.error('❌ [DB] Failed to initialize database:', error.message);
             console.error('❌ [DB] Will continue without database');
