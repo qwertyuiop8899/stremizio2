@@ -2038,7 +2038,7 @@ async function saveCorsaroResultsToDB(corsaroResults, mediaDetails, type, dbHelp
                 }
             }
             
-            if (!matchResult.matched && searchWords.length > 0 && !isShortTitle) {
+            if (!matchResult.matched && !isShortTitle) {
                 console.log(`⏭️ [DB Save] SKIP: "${result.title}" (${matchResult.percentage.toFixed(0)}% match, need 85%)`);
                 continue;
             }
