@@ -265,7 +265,10 @@ async function fetchCorsaroNeroSingle(searchQuery, type = 'movie') {
                 outputCategory = 'TV';
                 break;
             case 'anime':
-                acceptedCategories = ['animazione - film', 'animazione - serie'];
+                // ⚠️ IMPORTANTE: Su CorsaroNero gli anime hanno categorie inconsistenti
+                // Esempio: "One Piece S03E93-130" → "film", "One Piece S01E01-30" → "serie tv"
+                // Accettiamo TUTTE le categorie e filtriamo poi per titolo/episodi
+                acceptedCategories = ['animazione - film', 'animazione - serie', 'film', 'serie tv'];
                 outputCategory = 'Anime';
                 break;
             default:
