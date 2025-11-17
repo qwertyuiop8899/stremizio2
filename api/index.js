@@ -2909,15 +2909,18 @@ async function handleStream(type, id, config, workerOrigin) {
                     
                     // ✅ SOLUZIONE 3: Update DB with completed IDs (auto-repair)
                     if (completed.imdbId || completed.tmdbId) {
-                        console.log(`💾 [DB] Auto-repairing all torrents with matching TMDb/IMDb...`);
-                        // Update ALL torrents with same TMDb/IMDb (batch repair)
-                        const updatedCount = await dbHelper.updateTorrentsWithIds(
-                            firstResult.info_hash,  // Reference hash for safety
-                            completed.imdbId,        // Populate missing imdb_id
-                            completed.tmdbId         // Populate missing tmdb_id
-                        );
-                        if (updatedCount > 0) {
-                            console.log(`✅ [DB] Auto-repaired ${updatedCount} torrent(s) with completed IDs`);
+                        console.log(`💾 [DB] Auto-repairing ${dbResults.length} torrents with completed IDs...`);
+                        // Extract all info_hash from dbResults
+                        const infoHashes = dbResults.map(r => r.info_hash).filter(Boolean);
+                        if (infoHashes.length > 0) {
+                            const updatedCount = await dbHelper.updateTorrentsWithIds(
+                                infoHashes,           // ALL hashes from DB results
+                                completed.imdbId,     // Populate missing imdb_id
+                                completed.tmdbId      // Populate missing tmdb_id
+                            );
+                            if (updatedCount > 0) {
+                                console.log(`✅ [DB] Auto-repaired ${updatedCount} torrent(s) with completed IDs`);
+                            }
                         }
                     }
                 }
@@ -2960,6 +2963,24 @@ async function handleStream(type, id, config, workerOrigin) {
             
             if (dbResults.length > 0) {
                 console.log(`💾 [DB] Found ${dbResults.length} results by TMDb ID!`);
+                
+                // ✅ SOLUZIONE 3: Auto-repair IDs when found via TMDb but missing IMDb
+                const firstResult = dbResults[0];
+                if (firstResult.tmdb_id && !firstResult.imdb_id && mediaDetails.imdbId) {
+                    console.log(`💾 [DB] Auto-repairing ${dbResults.length} torrents found via TMDb (missing IMDb)...`);
+                    // Extract all info_hash from dbResults
+                    const infoHashes = dbResults.map(r => r.info_hash).filter(Boolean);
+                    if (infoHashes.length > 0) {
+                        const updatedCount = await dbHelper.updateTorrentsWithIds(
+                            infoHashes,           // ALL hashes from DB results
+                            mediaDetails.imdbId,  // Populate missing imdb_id
+                            mediaDetails.tmdbId   // Keep tmdb_id
+                        );
+                        if (updatedCount > 0) {
+                            console.log(`✅ [DB] Auto-repaired ${updatedCount} torrent(s) with IMDb ID`);
+                        }
+                    }
+                }
             }
         }
 
