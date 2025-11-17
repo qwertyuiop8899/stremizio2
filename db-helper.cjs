@@ -629,6 +629,7 @@ async function updateTorrentsWithIds(infoHash, imdbId, tmdbId) {
     const params = [];
     let paramIndex = 1;
     
+    // Build SET clause
     if (imdbId) {
       updates.push(`imdb_id = $${paramIndex++}`);
       params.push(imdbId);
@@ -640,23 +641,44 @@ async function updateTorrentsWithIds(infoHash, imdbId, tmdbId) {
     }
     
     if (updates.length === 0) {
-      console.log(`💾 [DB] No IDs to update for ${infoHash}`);
-      return false;
+      console.log(`💾 [DB] No IDs to update`);
+      return 0;
     }
     
-    params.push(infoHash);
+    // Build WHERE clause: update all torrents with same TMDb/IMDb
+    const conditions = [];
+    
+    // If we have tmdbId, update all torrents with this tmdbId OR this infoHash
+    if (tmdbId) {
+      conditions.push(`(tmdb_id = $${paramIndex} OR info_hash = $${paramIndex + 1})`);
+      params.push(tmdbId);
+      params.push(infoHash);
+      paramIndex += 2;
+    } else if (imdbId) {
+      // If only imdbId, update all torrents with this imdbId OR this infoHash
+      conditions.push(`(imdb_id = $${paramIndex} OR info_hash = $${paramIndex + 1})`);
+      params.push(imdbId);
+      params.push(infoHash);
+      paramIndex += 2;
+    } else {
+      // Fallback: only update single torrent
+      conditions.push(`info_hash = $${paramIndex}`);
+      params.push(infoHash);
+    }
+    
     const query = `
       UPDATE torrents 
       SET ${updates.join(', ')}
-      WHERE info_hash = $${paramIndex}
+      WHERE ${conditions.join(' AND ')}
+      AND (imdb_id IS NULL OR tmdb_id IS NULL)
     `;
     
     const result = await pool.query(query, params);
-    console.log(`💾 [DB] Updated ${result.rowCount} torrent(s) with completed IDs`);
-    return result.rowCount > 0;
+    console.log(`💾 [DB] Auto-repaired ${result.rowCount} torrent(s) with completed IDs`);
+    return result.rowCount;
   } catch (error) {
     console.error(`❌ [DB] Error updating IDs:`, error.message);
-    return false;
+    return 0;
   }
 }
 
