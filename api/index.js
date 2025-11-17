@@ -2602,11 +2602,15 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
             /(?<!\d)(\d{1,4})\s*[-–—]\s*(\d{1,4})(?!\d)/g                // 144-195 (not part of year like 1999-2011)
         ];
         
+        console.log(`🔍 [ANIME RANGE DEBUG] Light cleaned title: "${lightCleanedTitle}"`);
+        
         for (const pattern of rangePatterns) {
             const matches = lightCleanedTitle.matchAll(pattern);
             for (const match of matches) {
                 const startEp = parseInt(match[1]);
                 const endEp = parseInt(match[2]);
+                
+                console.log(`🔍 [ANIME RANGE] Found range: ${startEp}-${endEp}, checking if contains ${episodeNum}`);
                 
                 // ✅ STRICT VALIDATION: 
                 // 1. Start must be less than end
@@ -2621,9 +2625,16 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
                     startEp < 1900        // Not a year!
                 );
                 
-                if (isValidRange && episodeNum >= startEp && episodeNum <= endEp) {
+                if (!isValidRange) {
+                    console.log(`❌ [ANIME RANGE] Invalid range ${startEp}-${endEp}: size=${rangeSize}, startEp=${startEp}`);
+                    continue;
+                }
+                
+                if (episodeNum >= startEp && episodeNum <= endEp) {
                     console.log(`✅ [ANIME RANGE] "${torrentTitle.substring(0, 80)}" contains Ep.${startEp}-${endEp} (includes ${episodeNum})`);
                     return true;
+                } else {
+                    console.log(`❌ [ANIME RANGE] Episode ${episodeNum} NOT in range ${startEp}-${endEp}`);
                 }
             }
         }
