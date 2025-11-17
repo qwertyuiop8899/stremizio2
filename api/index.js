@@ -2909,14 +2909,14 @@ async function handleStream(type, id, config, workerOrigin) {
                     
                     // ✅ SOLUZIONE 3: Update DB with completed IDs (auto-repair)
                     if (completed.imdbId || completed.tmdbId) {
-                        console.log(`💾 [DB] Auto-repairing torrents with completed IDs...`);
-                        // Update all torrents with same title pattern (batch repair)
+                        console.log(`💾 [DB] Auto-repairing all torrents with matching TMDb/IMDb...`);
+                        // Update ALL torrents with same TMDb/IMDb (batch repair)
                         const updatedCount = await dbHelper.updateTorrentsWithIds(
-                            firstResult.info_hash,
-                            completed.imdbId,
-                            completed.tmdbId
+                            firstResult.info_hash,  // Reference hash for safety
+                            completed.imdbId,        // Populate missing imdb_id
+                            completed.tmdbId         // Populate missing tmdb_id
                         );
-                        if (updatedCount) {
+                        if (updatedCount > 0) {
                             console.log(`✅ [DB] Auto-repaired ${updatedCount} torrent(s) with completed IDs`);
                         }
                     }
