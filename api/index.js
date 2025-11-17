@@ -2564,18 +2564,54 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
     }
     
     if (isAnime) {
-        // For anime, a simple episode number match is often sufficient and more reliable.
-        // Look for ` 01 `, ` E01`, ` - 01`, ` [01] ` etc.
+        // For anime, look for absolute episode numbers (no season)
+        // Patterns to match:
+        // 1. Single episode: " 163 ", " - 163", "E163", etc.
+        // 2. Episode range: "E144-195", "144-195", etc.
+        
         const episodeStr = String(episodeNum).padStart(2, '0');
+        const episodeNumStr = String(episodeNum);
+        
+        // Check for single episode match
         const animePatterns = [
-            new RegExp(`\\b${episodeNum}\\b(?!p|i|\\.)`), // e.g., " 01 " but not "1080p" or "7.1"
-            new RegExp(`\\b${episodeStr}\\b(?!p|i|\\.)`),
+            new RegExp(`\\b${episodeNum}\\b(?!p|i|\\.|bit)`), // e.g., " 163 " but not "1080p" or "7.1" or "10bit"
+            new RegExp(`\\b${episodeStr}\\b(?!p|i|\\.|bit)`),
             new RegExp(`\\s-\\s${episodeStr}\\b`),
-            new RegExp(`e${episodeStr}`, 'i')
+            new RegExp(`\\be${episodeStr}\\b`, 'i'),
+            new RegExp(`\\be${episodeNumStr}\\b`, 'i')
         ];
-        const matches = animePatterns.some(pattern => pattern.test(normalizedTorrentTitle));
-        console.log(`${matches ? '✅' : '❌'} [ANIME] Episode match for "${torrentTitle}" Ep.${episodeNum}`);
-        return matches;
+        
+        const singleMatch = animePatterns.some(pattern => pattern.test(normalizedTorrentTitle));
+        if (singleMatch) {
+            console.log(`✅ [ANIME] Episode match for "${torrentTitle.substring(0, 80)}" Ep.${episodeNum}`);
+            return true;
+        }
+        
+        // Check for episode range (e.g., "E144-195", "144-195", "E01-30")
+        // Common patterns: SxxE##-## or just ##-##
+        const rangePatterns = [
+            /(?:s\d{1,2})?e(\d{1,3})\s*[-–—]\s*(\d{1,3})/i,  // S01E144-195 or E144-195
+            /\b(\d{1,3})\s*[-–—]\s*(\d{1,3})\b/              // 144-195
+        ];
+        
+        for (const pattern of rangePatterns) {
+            const matches = normalizedTorrentTitle.matchAll(new RegExp(pattern, 'g'));
+            for (const match of matches) {
+                const startEp = parseInt(match[1]);
+                const endEp = parseInt(match[2]);
+                
+                // Validate this is actually an episode range (not year, not resolution)
+                if (startEp > 0 && endEp > startEp && endEp <= 9999) {
+                    if (episodeNum >= startEp && episodeNum <= endEp) {
+                        console.log(`✅ [ANIME RANGE] "${torrentTitle.substring(0, 80)}" contains Ep.${startEp}-${endEp} (includes ${episodeNum})`);
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        console.log(`❌ [ANIME] Episode match for "${torrentTitle.substring(0, 80)}" Ep.${episodeNum}`);
+        return false;
     }
     
     const seasonStr = String(seasonNum).padStart(2, '0');
