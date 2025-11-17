@@ -2773,9 +2773,80 @@ async function handleStream(type, id, config, workerOrigin) {
             }
         }
 
-        // ✅ STEP 4: If still no results, try converting IDs and searching again
+        // ✅ STEP 4: If still no results, try FULL-TEXT SEARCH (FTS) as fallback
         if (dbEnabled && dbResults.length === 0) {
-            console.log(`💾 [DB] No results found. Will search online sources...`);
+            console.log(`💾 [DB] No results by ID. Trying Full-Text Search (FTS)...`);
+            
+            // Import cleanTitleForSearch for title cleaning
+            // Note: We need to replicate the logic here since it's not exported from daily-scraper
+            const cleanTitleForFTS = (title) => {
+                let cleaned = title;
+                cleaned = cleaned.replace(/\.(mkv|mp4|avi|mov)$/gi, '');
+                cleaned = cleaned.replace(/^\s*[\[\(]\d{4}[\]\)]\s*/g, '');
+                const beforeSeriesPattern = cleaned.match(/^(.+?)(?:\s*[\s._-]*(?:Stagion[ei]|Season[s]?|EP\.?|S\d{1,2}|\d{1,2}x\d{1,2}|19\d{2}|20\d{2}|\d{4}))/i);
+                if (beforeSeriesPattern) {
+                    cleaned = beforeSeriesPattern[1];
+                    cleaned = cleaned.replace(/[\s._-]+$/g, '');
+                } else {
+                    cleaned = cleaned.replace(/[\s._-]*Stagion[ei].*/gi, '');
+                    cleaned = cleaned.replace(/[\s._-]*Season[s]?.*/gi, '');
+                    cleaned = cleaned.replace(/[\s._-]*S\d{2}(E\d{2})?(-S?\d{2})?(E\d{2})?/gi, '');
+                    cleaned = cleaned.replace(/[\s._-]*\d{1,2}x\d{1,2}/gi, '');
+                    cleaned = cleaned.replace(/[\s._-]*EP\.?\s*\d{1,2}/gi, '');
+                }
+                cleaned = cleaned.replace(/\[.*?\]/g, '');
+                cleaned = cleaned.replace(/\(.*?\)/g, '');
+                cleaned = cleaned.replace(/[\(\[]\s*$/g, '');
+                cleaned = cleaned.replace(/\b(COMPLETA?|Completa?|FULL|Complete|Miniserie|MiniSerieTV|SERIE|Serie|SerieTV|TV|EXTENDED|Extended)\b/gi, '');
+                cleaned = cleaned.replace(/\bDirector'?s?\s*Cut\b/gi, '');
+                cleaned = cleaned.replace(/\bUncut\b/gi, '');
+                cleaned = cleaned.replace(/\bStagion[ei].*/gi, '');
+                cleaned = cleaned.replace(/\bSeason[s]?.*/gi, '');
+                cleaned = cleaned.replace(/\d{2,3}-\d{2,3}\/\d{2,3}/g, '');
+                cleaned = cleaned.replace(/\?\?/g, '');
+                cleaned = cleaned.replace(/[._-]+/g, ' ');
+                cleaned = cleaned.replace(/\b(SD|HD|720p|1080p|2160p|4K|UHD|BluRay|WEB DL|WEBRip|HDTV|DVDRip|BRRip|WEBDL)\b/gi, '');
+                cleaned = cleaned.replace(/\b(ITA|ENG|SPA|FRA|GER|JAP|KOR|MULTI|Multisub|SubS?|DUB|NFRip)\b/gi, '');
+                cleaned = cleaned.replace(/\b(DV|HDR|HDR10|HDR10Plus|H264|H265|H 264|H 265|x264|x265|HEVC|AVC|10bit|AAC|AC3|Mp3|DD5? 1|DTS|Atmos|DDP\d+ ?\d*)\b/gi, '');
+                cleaned = cleaned.replace(/\b(AMZN|NF|DSNP|HULU|HBO|ATVP|WEBMUX)\b/gi, '');
+                cleaned = cleaned.replace(/\b(MeM|GP|TheBlackKing|TheWhiteQueen|MIRCrew|FGT|RARBG|YTS|YIFY|ION10|PSA|FLUX|NAHOM|V3SP4|Notorious)\b/gi, '');
+                cleaned = cleaned.replace(/\bby[A-Za-z0-9]+\b/gi, '');
+                cleaned = cleaned.replace(/\s+/g, ' ').trim();
+                cleaned = cleaned.replace(/\s+(L'|Il |La |Gli |I |Le |Lo |Un |Una |Uno )[a-zàèéìòù']+(\s+[a-zàèéìòù']+)*$/g, '');
+                cleaned = cleaned.replace(/[\s-]+$/g, '').trim();
+                return cleaned;
+            };
+            
+            const cleanedTitle = cleanTitleForFTS(mediaDetails.title);
+            console.log(`💾 [DB FTS] Cleaned title: "${cleanedTitle}"`);
+            
+            try {
+                dbResults = await dbHelper.searchByTitleFTS(
+                    cleanedTitle,
+                    type,
+                    mediaDetails.year
+                );
+                
+                if (dbResults.length > 0) {
+                    console.log(`💾 [DB FTS] Found ${dbResults.length} results via Full-Text Search!`);
+                    
+                    // If we found results with FTS but they have NULL IDs, try to populate them
+                    const firstResult = dbResults[0];
+                    if (firstResult.imdb_id && !mediaDetails.imdbId) {
+                        mediaDetails.imdbId = firstResult.imdb_id;
+                        console.log(`💾 [DB FTS] Populated imdbId from FTS result: ${firstResult.imdb_id}`);
+                    }
+                    if (firstResult.tmdb_id && !mediaDetails.tmdbId) {
+                        mediaDetails.tmdbId = firstResult.tmdb_id;
+                        console.log(`💾 [DB FTS] Populated tmdbId from FTS result: ${firstResult.tmdb_id}`);
+                    }
+                } else {
+                    console.log(`💾 [DB FTS] No results found. Will search online sources...`);
+                }
+            } catch (error) {
+                console.error(`❌ [DB FTS] Search failed:`, error.message);
+                // Continue to live search
+            }
             
             // Try to complete missing IDs for better matching later
             if ((mediaDetails.imdbId && !mediaDetails.tmdbId) || 
