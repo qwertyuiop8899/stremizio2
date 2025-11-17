@@ -2569,6 +2569,8 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
         // 1. Single episode: " 163 ", " - 163", "E163", etc.
         // 2. Episode range: "E144-195", "144-195", etc.
         
+        console.log(`🔍 [ANIME DEBUG] Normalized title: "${normalizedTorrentTitle}", Episode: ${episodeNum}`);
+        
         const episodeStr = String(episodeNum).padStart(2, '0');
         const episodeNumStr = String(episodeNum);
         
@@ -2587,11 +2589,13 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
             return true;
         }
         
-        // Check for episode range (e.g., "E144-195", "144-195", "E01-30")
+        // Check for episode range (e.g., "E144-195", "144-195", "E01-30", "E1001-1050")
         // Common patterns: SxxE##-## or just ##-##
+        // Support up to 4 digits (9999) for long-running anime like One Piece
+        // CRITICAL: Use negative lookahead AND lookbehind to avoid matching years like "144-1951999"
         const rangePatterns = [
-            /(?:s\d{1,2})?e(\d{1,3})\s*[-–—]\s*e?(\d{1,3})(?!\d)/i,  // S01E144-195 or E144-E195 or E144-195 (not followed by more digits)
-            /\b(\d{1,3})\s*[-–—]\s*(\d{1,3})(?!\d)/              // 144-195 (not followed by more digits)
+            /(?:s\d{1,2})?e(\d{1,4})\s*[-–—]\s*e?(\d{1,4})(?=[^\d]|$)/i,  // S01E144-195 or E1001-1050 (followed by non-digit or end)
+            /(?<![.\d])(\d{1,4})\s*[-–—]\s*(\d{1,4})(?=[^\d]|$)/         // 144-195 or 1001-1050 (not preceded/followed by digit/dot)
         ];
         
         for (const pattern of rangePatterns) {
@@ -2602,15 +2606,15 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
                 
                 // ✅ STRICT VALIDATION: 
                 // 1. Start must be less than end
-                // 2. Range must be reasonable (< 200 episodes, typical for anime packs)
+                // 2. Range must be reasonable (≤300 episodes per pack, typical for anime)
                 // 3. End must be greater than 0
-                // 4. For anime, typical ranges are 1-50, 51-100, etc. Not 1-301!
+                // 4. Support up to 9999 episodes for very long anime
                 const rangeSize = endEp - startEp;
                 const isValidRange = (
                     startEp > 0 && 
                     endEp > startEp && 
                     endEp <= 9999 &&
-                    rangeSize <= 200  // Max 200 episodes per pack (catches 1-301 false matches)
+                    rangeSize <= 300  // Max 300 episodes per pack (typical: 1-50, 51-100, 1001-1100, etc.)
                 );
                 
                 if (isValidRange && episodeNum >= startEp && episodeNum <= endEp) {
@@ -3489,10 +3493,13 @@ async function handleStream(type, id, config, workerOrigin) {
             
             console.log(`📺 Episode filtering: ${filteredResults.length} of ${originalCount} results match`);
             
-            // If exact matching removed too many results, be more lenient
-            if (filteredResults.length === 0 && originalCount > 0) {
-                console.log('⚠️ Exact filtering removed all results, using broader match');
+            // ⚠️ FALLBACK: For NON-anime series, if exact matching fails, be more lenient
+            // For anime, NEVER use fallback - if no episode matches, return nothing!
+            if (filteredResults.length === 0 && originalCount > 0 && !kitsuId) {
+                console.log('⚠️ Exact filtering removed all results, using broader match (NON-ANIME only)');
                 filteredResults = results.slice(0, Math.min(10, results.length));
+            } else if (filteredResults.length === 0 && kitsuId) {
+                console.log('❌ [ANIME] No packs found containing episode ${episode}. Returning empty results.');
             }
         } else if (type === 'movie') {
             const originalCount = filteredResults.length;
