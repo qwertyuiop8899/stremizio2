@@ -3339,6 +3339,9 @@ async function handleStream(type, id, config, workerOrigin) {
             // Extract short version (before ":" if present)
             const shortTitle = title.includes(':') ? title.split(':')[0].trim() : title;
             
+            // 0. SHORT TITLE ALONE FIRST (generic search - CRITICAL for enrichment!)
+            searchQueries.push(shortTitle);
+            
             // 1. BASE QUERIES (short version - higher priority)
             searchQueries.push(`${shortTitle} S${seasonStr}E${episodeStr}`);  // Episode specific
             searchQueries.push(`${shortTitle} S${seasonStr}`);                 // Season pack
@@ -3369,13 +3372,6 @@ async function handleStream(type, id, config, workerOrigin) {
                 const normalized = title.replace(/:/g, '');
                 searchQueries.push(`${normalized} S${seasonStr}`);
                 searchQueries.push(`${normalized} S${seasonStr}E${episodeStr}`);
-            }
-            
-            // 6. Short title alone (only if really short)
-            const titleWords = shortTitle.trim().split(/\s+/);
-            const isShortTitle = titleWords.length === 1 && titleWords[0].length <= 6;
-            if (isShortTitle) {
-                searchQueries.push(shortTitle);
             }
             
             if (label) console.log(`📝 Added queries for ${label}: "${title}"`);
