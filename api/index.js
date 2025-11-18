@@ -2588,31 +2588,49 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
                           torrentTitle.toLowerCase().includes('s01e01') && 
                           torrentTitle.toLowerCase().includes('2160p');
 
-    // ✅ STEP 3: Check if title matches
-    const titleIsAMatch = titlesToCheck.some(showTitle => {
-        const normalizedShowTitle = showTitle.toLowerCase()
-            .replace(/[^\w\s]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-        
-        const showWords = normalizedShowTitle.split(' ')
-            .filter(word => word.length > 2)
-            .filter(word => !['the', 'and', 'or', 'in', 'on', 'at', 'to'].includes(word));
-        
-        if (showWords.length === 0) return false;
+    // ✅ STEP 3: Check if title matches (PHASE 1 - Normal match)
+    const checkTitleMatch = (titlesList) => {
+        return titlesList.some(showTitle => {
+            const normalizedShowTitle = showTitle.toLowerCase()
+                .replace(/[^\w\s]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+            
+            const showWords = normalizedShowTitle.split(' ')
+                .filter(word => word.length > 2)
+                .filter(word => !['the', 'and', 'or', 'in', 'on', 'at', 'to'].includes(word));
+            
+            if (showWords.length === 0) return false;
 
-        const matchingWords = showWords.filter(word => 
-            normalizedTorrentTitle.includes(word)
-        );
+            const matchingWords = showWords.filter(word => 
+                normalizedTorrentTitle.includes(word)
+            );
+            
+            const percentageMatch = matchingWords.length / showWords.length;
+            
+            if (isDebugTarget) {
+                console.log(`    🔍 Title match: showTitle="${showTitle}", showWords=[${showWords.join(',')}], matchingWords=[${matchingWords.join(',')}], percentage=${percentageMatch}`);
+            }
+            
+            return percentageMatch >= 0.6;
+        });
+    };
+    
+    let titleIsAMatch = checkTitleMatch(titlesToCheck);
+    
+    // ✅ STEP 3.5: If no match, try PHASE 2 - Split on "-" as last resort
+    if (!titleIsAMatch) {
+        const fallbackTitles = titlesToCheck
+            .filter(title => title.includes('-'))
+            .map(title => title.split('-')[0].trim());
         
-        const percentageMatch = matchingWords.length / showWords.length;
-        
-        if (isDebugTarget) {
-            console.log(`    🔍 Title match: showTitle="${showTitle}", showWords=[${showWords.join(',')}], matchingWords=[${matchingWords.join(',')}], percentage=${percentageMatch}`);
+        if (fallbackTitles.length > 0) {
+            if (isDebugTarget) {
+                console.log(`    🔄 Trying fallback with titles before "-": ${JSON.stringify(fallbackTitles)}`);
+            }
+            titleIsAMatch = checkTitleMatch(fallbackTitles);
         }
-        
-        return percentageMatch >= 0.6;
-    });
+    }
     
     if (!titleIsAMatch) {
         if (isDebugTarget) {
