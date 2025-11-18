@@ -2579,6 +2579,7 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
     
     // ✅ STEP 2: Heavy cleaning for title matching only
     const normalizedTorrentTitle = lightCleanedTitle.toLowerCase()
+        .replace(/[^\w\s]/g, ' ')  // Remove all punctuation including dots
         .replace(/\s+/g, ' ')
         .trim();
     
