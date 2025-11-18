@@ -266,7 +266,7 @@ async function updateRdCacheStatus(cacheResults) {
 }
 
 /**
- * Get cached RD availability for hashes (within 5 days)
+ * Get cached RD availability for hashes (within 10 days)
  * @param {Array} hashes - Array of info hashes
  * @returns {Promise<Object>} Map of hash -> {cached: boolean, lastCheck: Date}
  */
@@ -284,7 +284,7 @@ async function getRdCachedAvailability(hashes) {
       WHERE info_hash = ANY($1)
         AND cached_rd IS NOT NULL
         AND last_cached_check IS NOT NULL
-        AND last_cached_check > NOW() - INTERVAL '5 days'
+        AND last_cached_check > NOW() - INTERVAL '10 days'
     `;
     
     const result = await pool.query(query, [lowerHashes]);
@@ -298,7 +298,7 @@ async function getRdCachedAvailability(hashes) {
       };
     });
     
-    console.log(`💾 [DB] Found ${result.rows.length}/${hashes.length} hashes with valid RD cache (< 5 days)`);
+    console.log(`💾 [DB] Found ${result.rows.length}/${hashes.length} hashes with valid RD cache (< 10 days)`);
     
     return cachedMap;
     
