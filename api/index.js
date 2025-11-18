@@ -2906,8 +2906,12 @@ async function handleStream(type, id, config, workerOrigin) {
         let originalTitle = null;
         if (mediaDetails.tmdbId && !kitsuId) { // Solo per film/serie da TMDB
             try {
+                // Convert 'series' to 'tv' for TMDB API
+                const tmdbType = mediaDetails.type === 'series' ? 'tv' : 'movie';
+                console.log(`🔍 [Italian Title] Using TMDB type: ${tmdbType} for mediaDetails.type: ${mediaDetails.type}`);
+                
                 // 1. Prima chiamata: ottieni dettagli in italiano (language=it-IT)
-                const italianDetails = await getTMDBDetails(mediaDetails.tmdbId, mediaDetails.type, tmdbKey, 'external_ids', 'it-IT');
+                const italianDetails = await getTMDBDetails(mediaDetails.tmdbId, tmdbType, tmdbKey, 'external_ids', 'it-IT');
                 console.log(`🔍 [Italian Title] TMDB response with language=it-IT received`);
                 
                 if (italianDetails) {
@@ -2935,7 +2939,7 @@ async function handleStream(type, id, config, workerOrigin) {
                 // 2. Fallback: se non abbiamo trovato il titolo italiano, prova con translations
                 if (!italianTitle) {
                     console.log(`🔍 [Italian Title] Trying translations as fallback...`);
-                    const detailsWithTranslations = await getTMDBDetails(mediaDetails.tmdbId, mediaDetails.type, tmdbKey, 'translations', 'en-US');
+                    const detailsWithTranslations = await getTMDBDetails(mediaDetails.tmdbId, tmdbType, tmdbKey, 'translations', 'en-US');
                     
                     if (detailsWithTranslations?.translations?.translations) {
                         console.log(`🔍 [Italian Title] Found ${detailsWithTranslations.translations.translations.length} translations`);
@@ -4131,9 +4135,18 @@ async function handleStream(type, id, config, workerOrigin) {
 // ✅ TMDB helper functions (keeping existing but adding better error handling)
 async function getTMDBDetails(tmdbId, type = 'movie', tmdbApiKey, append = 'external_ids', language = 'it-IT') {
     try {
-        const response = await fetch(`${TMDB_BASE_URL}/${type}/${tmdbId}?api_key=${tmdbApiKey}&language=${language}&append_to_response=${append}`);
-        if (!response.ok) throw new Error(`TMDB API error: ${response.status}`);
-        return await response.json();
+        const url = `${TMDB_BASE_URL}/${type}/${tmdbId}?api_key=${tmdbApiKey}&language=${language}&append_to_response=${append}`;
+        console.log(`🔍 [TMDB] Fetching: ${url.replace(tmdbApiKey, 'HIDDEN')}`);
+        const response = await fetch(url);
+        console.log(`🔍 [TMDB] Response status: ${response.status} ${response.statusText}`);
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`❌ [TMDB] Error response: ${errorText.substring(0, 200)}`);
+            throw new Error(`TMDB API error: ${response.status}`);
+        }
+        const data = await response.json();
+        console.log(`✅ [TMDB] Success! Title/Name field: ${data.title || data.name}`);
+        return data;
     } catch (error) {
         console.warn('⚠️ TMDB fetch warning (will use fallback):', error.message);
         return null;
