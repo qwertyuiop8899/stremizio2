@@ -3,8 +3,8 @@
 <head> 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <link rel="icon" type="image/png" href="logo.png">
-    <link rel="shortcut icon" type="image/png" href="logo.png">
+    <link rel="icon" type="image/png" href="/logo.png">
+    <link rel="shortcut icon" type="image/png" href="/logo.png">
     <title>IlCorsaroViola | Configurazione</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -546,10 +546,10 @@
         <!-- Header -->
         <div class="header">
             <div class="header-left">
-                <img src="prisonmike.png" alt="Prison Mike" class="prisonmike-img">
+                <img src="/prisonmike.png" alt="Prison Mike" class="prisonmike-img">
                 
                 <div class="logo-container">
-                    <img src="logo.png" alt="Logo" class="logo">
+                    <img src="/logo.png" alt="Logo" class="logo">
                     <div class="brand" style="text-align: center;">
                         <h1 style="margin-bottom: 5px;">IlCorsaroViola</h1>
                         <small style="font-size: 12px; color: #9ca3af; display: block; line-height: 1.5;">
@@ -559,7 +559,7 @@
                     </div>
                 </div>
                 
-                <img src="prisonmike.png" alt="Prison Mike" class="prisonmike-img">
+                <img src="/prisonmike.png" alt="Prison Mike" class="prisonmike-img">
             </div>
             
             <div class="header-right">
@@ -831,59 +831,89 @@
 
         // ✅ Load existing configuration if present (from /configure endpoint)
         if (window.EXISTING_CONFIG) {
-            console.log('📝 Preloading existing configuration...');
+            console.log('📝 Preloading existing configuration...', window.EXISTING_CONFIG);
             const cfg = window.EXISTING_CONFIG;
             
             // TMDb API Key (required)
             if (cfg.tmdb_key) {
-                document.getElementById('tmdbKeyInput').value = cfg.tmdb_key;
+                document.getElementById('tmdb_key').value = cfg.tmdb_key;
+                console.log('✅ Loaded tmdb_key');
             }
             
-            // Debrid services
-            if (cfg.use_rd && cfg.rd_key) {
-                document.getElementById('rdKeyInput').value = cfg.rd_key;
+            // Debrid services - Real-Debrid
+            if (cfg.use_rd) {
+                document.getElementById('use_rd').checked = true;
+                if (cfg.rd_key) {
+                    document.getElementById('rd_key').value = cfg.rd_key;
+                    document.getElementById('rd_key').disabled = false;
+                    console.log('✅ Loaded rd_key');
+                }
             }
-            if (cfg.use_torbox && cfg.torbox_key) {
-                document.getElementById('torboxKeyInput').value = cfg.torbox_key;
+            
+            // Torbox
+            if (cfg.use_torbox) {
+                document.getElementById('use_torbox').checked = true;
+                if (cfg.torbox_key) {
+                    document.getElementById('torbox_key').value = cfg.torbox_key;
+                    document.getElementById('torbox_key').disabled = false;
+                    console.log('✅ Loaded torbox_key');
+                }
             }
-            if (cfg.use_alldebrid && cfg.ad_key) {
-                document.getElementById('allDebridKeyInput').value = cfg.ad_key;
+            
+            // AllDebrid
+            if (cfg.use_alldebrid) {
+                document.getElementById('use_alldebrid').checked = true;
+                if (cfg.ad_key) {
+                    document.getElementById('alldebrid_key').value = cfg.ad_key;
+                    document.getElementById('alldebrid_key').disabled = false;
+                    console.log('✅ Loaded ad_key');
+                }
             }
             
             // MediaFlow Proxy
             if (cfg.mediaflow_url) {
-                document.getElementById('mediaflowUrlInput').value = cfg.mediaflow_url;
+                document.getElementById('mediaflow_url').value = cfg.mediaflow_url;
+                console.log('✅ Loaded mediaflow_url');
             }
             if (cfg.mediaflow_password) {
-                document.getElementById('mediaflowPasswordInput').value = cfg.mediaflow_password;
+                document.getElementById('mediaflow_password').value = cfg.mediaflow_password;
+                console.log('✅ Loaded mediaflow_password');
             }
             
             // Jackettio
             if (cfg.jackett_url) {
-                document.getElementById('jackettUrlInput').value = cfg.jackett_url;
+                document.getElementById('jackett_url').value = cfg.jackett_url;
+                console.log('✅ Loaded jackett_url');
             }
             if (cfg.jackett_api_key) {
-                document.getElementById('jackettApiKeyInput').value = cfg.jackett_api_key;
+                document.getElementById('jackett_api_key').value = cfg.jackett_api_key;
+                console.log('✅ Loaded jackett_api_key');
             }
             if (cfg.jackett_password) {
-                document.getElementById('jackettPasswordInput').value = cfg.jackett_password;
+                document.getElementById('jackett_password').value = cfg.jackett_password;
+                console.log('✅ Loaded jackett_password');
             }
             
             // Search sites checkboxes
             if (cfg.use_corsaronero !== undefined) {
-                document.getElementById('useCorsaroNero').checked = cfg.use_corsaronero;
+                document.getElementById('use_corsaronero').checked = cfg.use_corsaronero;
+                console.log('✅ Loaded use_corsaronero:', cfg.use_corsaronero);
             }
             if (cfg.use_uindex !== undefined) {
-                document.getElementById('useUIndex').checked = cfg.use_uindex;
+                document.getElementById('use_uindex').checked = cfg.use_uindex;
+                console.log('✅ Loaded use_uindex:', cfg.use_uindex);
             }
             if (cfg.use_knaben !== undefined) {
-                document.getElementById('useKnaben').checked = cfg.use_knaben;
+                document.getElementById('use_knaben').checked = cfg.use_knaben;
+                console.log('✅ Loaded use_knaben:', cfg.use_knaben);
             }
             
             console.log('✅ Configuration preloaded successfully');
             
             // Trigger updateInstallLink to refresh the UI
             updateInstallLink();
+        } else {
+            console.log('ℹ️ No EXISTING_CONFIG found in window');
         }
 
         // Event listeners for all inputs
