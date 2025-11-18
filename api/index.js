@@ -2046,12 +2046,15 @@ async function saveCorsaroResultsToDB(corsaroResults, mediaDetails, type, dbHelp
             
             // Try matching with English title first
             let matchResult = checkTitleMatch(mediaDetails.title);
+            console.log(`🔍 [DB Save] English title match: ${matchResult.percentage.toFixed(0)}% for "${result.title.substring(0, 50)}..."`);
             
             // If English doesn't match and we have Italian title, try Italian
             if (!matchResult.matched && italianTitle && italianTitle !== mediaDetails.title) {
-                matchResult = checkTitleMatch(italianTitle);
-                if (matchResult.matched) {
-                    console.log(`🇮🇹 [DB Save] Matched with Italian title: "${italianTitle}"`);
+                const italianMatchResult = checkTitleMatch(italianTitle);
+                console.log(`🔍 [DB Save] Italian title match: ${italianMatchResult.percentage.toFixed(0)}% for "${result.title.substring(0, 50)}..."`);
+                if (italianMatchResult.matched) {
+                    matchResult = italianMatchResult;
+                    console.log(`🇮🇹 [DB Save] Using Italian title match: "${italianTitle}"`);
                 }
             }
             
@@ -2084,11 +2087,15 @@ async function saveCorsaroResultsToDB(corsaroResults, mediaDetails, type, dbHelp
             });
         }
         
+        console.log(`📊 [DB Save] Prepared ${torrentsToInsert.length} torrents for insertion`);
+        
         if (torrentsToInsert.length > 0) {
+            console.log(`💾 [DB Save] Calling batchInsertTorrents with ${torrentsToInsert.length} torrents...`);
             const insertedCount = await dbHelper.batchInsertTorrents(torrentsToInsert);
+            console.log(`✅ [DB Save] batchInsertTorrents returned: ${insertedCount} (inserted/updated count)`);
             console.log(`✅ [DB Save] Inserted ${insertedCount}/${torrentsToInsert.length} new torrents`);
         } else {
-            console.log(`⚠️ [DB Save] No valid torrents to insert`);
+            console.log(`⚠️ [DB Save] No valid torrents to insert (all filtered out)`);
         }
     } catch (error) {
         console.error(`❌ [DB Save] Error:`, error);
@@ -2249,18 +2256,20 @@ async function enrichDatabaseInBackground(mediaDetails, type, season = null, epi
         }
         
         // Prepare DB inserts
+        console.log(`🔄 [Background] Preparing ${corsaroResults.length} torrents for insertion...`);
         const torrentsToInsert = [];
         for (const result of corsaroResults) {
             if (!result.infoHash || result.infoHash.length < 32) {
-                console.log(`⚠️ [Background] Skipping torrent with invalid hash: ${result.title}`);
+                console.log(`⚠️ [Background] Skipping torrent with invalid hash (${result.infoHash?.length || 0} chars): ${result.title}`);
                 continue;
             }
+            console.log(`✅ [Background] Valid hash for: ${result.title.substring(0, 60)}...`);
             
             // Extract IMDB ID from title if available (pattern: tt1234567)
             const imdbMatch = result.title.match(/tt\d{7,8}/i);
             const imdbId = imdbMatch ? imdbMatch[0] : (mediaDetails.imdbId || null);
             
-            torrentsToInsert.push({
+            const torrentData = {
                 info_hash: result.infoHash.toLowerCase(),
                 provider: 'CorsaroNero',
                 title: result.title,
@@ -2273,7 +2282,9 @@ async function enrichDatabaseInBackground(mediaDetails, type, season = null, epi
                 cached_rd: null, // Unknown cache status (will be checked on first play)
                 last_cached_check: null,
                 file_index: null // Will be populated on first play
-            });
+            };
+            torrentsToInsert.push(torrentData);
+            console.log(`📦 [Background] Prepared torrent: hash=${result.infoHash.substring(0,8)}... imdb=${imdbId} tmdb=${mediaDetails.tmdbId} size=${result.sizeInBytes}`);
         }
         
         console.log(`🔄 [Background] Prepared ${torrentsToInsert.length}/${corsaroResults.length} torrents for insertion`);
@@ -4118,15 +4129,21 @@ async function handleStream(type, id, config, workerOrigin) {
             }
             
             // 2️⃣ DELAYED: Deep enrichment with Italian title (for movies AND series)
+            console.log(`🔍 [Enrichment Check] italianTitle="${italianTitle}", mediaDetails.title="${mediaDetails.title}", match=${italianTitle === mediaDetails.title}`);
             if (italianTitle && italianTitle !== mediaDetails.title) {
-                console.log(`🔄 [Background] Scheduling deep enrichment with Italian title "${italianTitle}" (type: ${type})`);
+                console.log(`✅ [Background] Scheduling deep enrichment with Italian title "${italianTitle}" (type: ${type})`);
                 setImmediate(async () => {
                     try {
+                        console.log(`🔄 [Background] Starting enrichDatabaseInBackground NOW...`);
                         await enrichDatabaseInBackground(mediaDetails, type, season, episode, dbHelper);
+                        console.log(`✅ [Background] enrichDatabaseInBackground completed successfully`);
                     } catch (err) {
                         console.warn(`⚠️ [Background] Deep enrichment failed (non-critical):`, err.message);
+                        console.error(`❌ [Background] Full error:`, err);
                     }
                 });
+            } else {
+                console.log(`⏭️  [Background] Enrichment skipped (italianTitle="${italianTitle}", same as English title)`);
             }
         } else {
             console.log(`⏭️  [Background] Enrichment skipped (dbEnabled=${dbEnabled}, hasMediaDetails=${!!mediaDetails}, hasIds=${!!(mediaDetails?.tmdbId || mediaDetails?.imdbId || mediaDetails?.kitsuId)})`);
