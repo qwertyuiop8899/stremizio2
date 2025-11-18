@@ -3029,6 +3029,20 @@ async function handleStream(type, id, config, workerOrigin) {
             }
         }
         // --- FINE MODIFICA ---
+        
+        // ✅ BUILD TITLES ARRAY: Include all possible titles for matching
+        if (!Array.isArray(mediaDetails.titles)) {
+            const allTitles = new Set();
+            // Always include the main English title
+            if (mediaDetails.title) allTitles.add(mediaDetails.title);
+            // Add Italian title if found
+            if (italianTitle && italianTitle !== mediaDetails.title) allTitles.add(italianTitle);
+            // Add original title if different
+            if (originalTitle && originalTitle !== mediaDetails.title && originalTitle !== italianTitle) allTitles.add(originalTitle);
+            
+            mediaDetails.titles = Array.from(allTitles);
+            console.log(`📝 Built titles array: ${JSON.stringify(mediaDetails.titles)}`);
+        }
 
         const displayTitle = Array.isArray(mediaDetails.titles) ? mediaDetails.titles[0] : mediaDetails.title;
         console.log(`✅ Found: ${displayTitle} (${mediaDetails.year})`);
