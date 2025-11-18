@@ -3247,6 +3247,7 @@ async function handleStream(type, id, config, workerOrigin) {
 
         // Build search queries (only if no DB/FTS results)
         const searchQueries = [];
+        let finalSearchQueries = []; // Declare here, outside the conditional blocks
         
         // Skip live search if we already have results
         if (skipLiveSearch) {
@@ -3353,7 +3354,7 @@ async function handleStream(type, id, config, workerOrigin) {
         }
         
         // Rimuovi duplicati e logga
-        const finalSearchQueries = [...new Set(searchQueries)];
+        finalSearchQueries = [...new Set(searchQueries)];
         console.log(`📚 Final search queries:`, finalSearchQueries);
         // --- FINE MODIFICA ---
         
