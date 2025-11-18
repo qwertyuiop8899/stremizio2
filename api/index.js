@@ -3325,15 +3325,12 @@ async function handleStream(type, id, config, workerOrigin) {
             console.log(`🔍 [3-Tier] No results from DB/FTS (Tier 1/2) - proceeding to live search (Tier 3)`);
         }
 
-        // Build search queries (only if no DB/FTS results)
+        // Build search queries (ALWAYS - needed for both live search AND enrichment)
         const searchQueries = [];
         let finalSearchQueries = []; // Declare here, outside the conditional blocks
         
-        // Skip live search if we already have results
-        if (skipLiveSearch) {
-            console.log(`⏭️  [3-Tier] Skipping live search query building - will process ${dbResults.length} cached results`);
-            // searchQueries remains empty - no live search needed
-        } else {
+        // Always build queries (needed for enrichment even when skipping live search)
+        console.log(`📝 [Queries] Building search queries for enrichment and live search...`);
         if (type === 'series') {
             if (kitsuId) { // Anime search strategy
                 const uniqueQueries = new Set();
@@ -3442,8 +3439,6 @@ async function handleStream(type, id, config, workerOrigin) {
         finalSearchQueries = [...new Set(searchQueries)];
         console.log(`📚 Final search queries (${finalSearchQueries.length} total):`, finalSearchQueries);
         // --- FINE MODIFICA ---
-        
-        } // Close else block (skip live search if DB/FTS has results)
 
         // --- NUOVA LOGICA DI AGGREGAZIONE E DEDUPLICAZIONE ---
         const allRawResults = [];
