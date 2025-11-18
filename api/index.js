@@ -3352,90 +3352,95 @@ async function handleStream(type, id, config, workerOrigin) {
                 const seasonStr = String(season).padStart(2, '0');
                 const episodeStr = String(episode).padStart(2, '0');
                 
-                // 1. Query specifica per episodio
-                let baseQuery = `${mediaDetails.title} S${seasonStr}E${episodeStr}`;
-                if (mediaDetails.tmdbId) {
-                    const tvShowDetails = await getTVShowDetails(mediaDetails.tmdbId, season, episode, tmdbKey);
-                    if (tvShowDetails && tvShowDetails.episodeTitle) {
-                        baseQuery += ` ${tvShowDetails.episodeTitle}`;
+                // Helper function to generate queries for a given title
+                const addQueriesForTitle = (title, label = '') => {
+                    if (!title) return;
+                    
+                    // Extract short version (before ":" if present)
+                    const shortTitle = title.includes(':') ? title.split(':')[0].trim() : title;
+                    
+                    // 1. BASE QUERIES (short version - higher priority)
+                    searchQueries.push(`${shortTitle} S${seasonStr}E${episodeStr}`);  // Episode specific
+                    searchQueries.push(`${shortTitle} S${seasonStr}`);                 // Season pack
+                    searchQueries.push(`${shortTitle} Stagione ${season}`);            // Italian word
+                    searchQueries.push(`${shortTitle} Season ${season}`);              // English word
+                    searchQueries.push(`${shortTitle} Complete`);                      // Complete pack
+                    searchQueries.push(`${shortTitle} S01`);                           // S01 packs
+                    
+                    // 2. COMPLETE QUERIES WITH CODES (full title with ":")
+                    if (title !== shortTitle) {
+                        searchQueries.push(`${title} S${seasonStr}E${episodeStr}`);
+                        searchQueries.push(`${title} S${seasonStr}`);
                     }
-                }
-                searchQueries.push(baseQuery);
+                    
+                    // 3. COMPLETE QUERIES WITH WORDS (full title with "Stagione/Season")
+                    if (title !== shortTitle) {
+                        searchQueries.push(`${title} Stagione ${season}`);
+                        searchQueries.push(`${title} Season ${season}`);
+                    }
+                    
+                    // 4. COMPLETE TITLE ONLY (for complete packs)
+                    if (title !== shortTitle) {
+                        searchQueries.push(title);
+                    }
+                    
+                    // 5. NORMALIZED QUERIES (without ":" but with spaces)
+                    if (title !== shortTitle && title.includes(':')) {
+                        const normalized = title.replace(/:/g, '');
+                        searchQueries.push(`${normalized} S${seasonStr}`);
+                        searchQueries.push(`${normalized} S${seasonStr}E${episodeStr}`);
+                    }
+                    
+                    // 6. Short title alone (only if really short)
+                    const titleWords = shortTitle.trim().split(/\s+/);
+                    const isShortTitle = titleWords.length === 1 && titleWords[0].length <= 6;
+                    if (isShortTitle) {
+                        searchQueries.push(shortTitle);
+                    }
+                    
+                    if (label) console.log(`📝 Added queries for ${label}: "${title}"`);
+                };
                 
-                // 2. ✅ NUOVA QUERY: Season pack (es: "Simpson S27" per trovare pack completi)
-                searchQueries.push(`${mediaDetails.title} S${seasonStr}`);
-                
-                // 3. ✅ NUOVA QUERY: "Stagione XX" in italiano
-                searchQueries.push(`${mediaDetails.title} Stagione ${season}`);
-                
-                // 4. ✅ NUOVA QUERY: "Season XX" in inglese
-                searchQueries.push(`${mediaDetails.title} Season ${season}`);
-                
-                // 5. ✅ NUOVA QUERY: Complete pack per trovare S01-S10, S01-S07, etc
-                searchQueries.push(`${mediaDetails.title} Complete`);
-                searchQueries.push(`${mediaDetails.title} S01`);
-                
-                // 6. Fallback: solo il titolo (per pack multi-stagione)
-                // 🔥 OPZIONE C: Solo se titolo breve (≤6 lettere, 1 parola)
-                const titleWords = mediaDetails.title.trim().split(/\s+/);
-                const isShortTitle = titleWords.length === 1 && titleWords[0].length <= 6;
-                if (isShortTitle) {
-                    console.log(`📏 Short title "${mediaDetails.title}", including generic query`);
-                    searchQueries.push(mediaDetails.title);
-                } else {
-                    console.log(`📏 Long title "${mediaDetails.title}", skipping generic query for background enrichment`);
-                }
+                // Add queries for main English title
+                addQueriesForTitle(mediaDetails.title, 'English title');
             }
         } else { // Movie
             searchQueries.push(`${mediaDetails.title} ${mediaDetails.year}`);
             searchQueries.push(mediaDetails.title); // Aggiunto per completezza
         }
 
-        // --- NUOVA MODIFICA: Aggiungi titolo italiano alle query di ricerca ---
-        if (italianTitle) {
-            console.log(`🇮🇹 Adding Italian title "${italianTitle}" to search queries.`);
-            if (type === 'series' && !kitsuId) {
-                const seasonStr = String(season).padStart(2, '0');
-                const episodeStr = String(episode).padStart(2, '0');
-                
-                // Query specifiche con titolo italiano
-                searchQueries.push(`${italianTitle} S${seasonStr}E${episodeStr}`);
-                searchQueries.push(`${italianTitle} S${seasonStr}`);
-                searchQueries.push(`${italianTitle} Stagione ${season}`);
-                searchQueries.push(`${italianTitle} Season ${season}`);
-                searchQueries.push(italianTitle);
-                
-                // 🆕 Query miste (inglese + italiano) per siti che usano entrambi
-                searchQueries.push(`${mediaDetails.title} ${italianTitle} S${seasonStr}`);
-                searchQueries.push(`${mediaDetails.title} ${italianTitle}`);
-            } else if (type === 'movie') {
-                searchQueries.push(`${italianTitle} ${mediaDetails.year}`);
-                searchQueries.push(italianTitle);
-                searchQueries.push(`${mediaDetails.title} ${italianTitle}`);
+        // --- NUOVA MODIFICA: Aggiungi titolo italiano e originale alle query di ricerca ---
+        if (italianTitle && type === 'series' && !kitsuId) {
+            console.log(`🇮🇹 Adding Italian title queries...`);
+            addQueriesForTitle(italianTitle, 'Italian title');
+        } else if (italianTitle && type === 'movie') {
+            searchQueries.push(`${italianTitle} ${mediaDetails.year}`);
+            searchQueries.push(italianTitle);
+            // Also add short version if it has ":"
+            if (italianTitle.includes(':')) {
+                const shortItalian = italianTitle.split(':')[0].trim();
+                searchQueries.push(`${shortItalian} ${mediaDetails.year}`);
+                searchQueries.push(shortItalian);
             }
         }
 
-        if (originalTitle) {
-            console.log(`🌍 Adding original title "${originalTitle}" to search queries.`);
-            if (type === 'series' && !kitsuId) {
-                const seasonStr = String(season).padStart(2, '0');
-                const episodeStr = String(episode).padStart(2, '0');
-                
-                // Query specifiche con titolo originale
-                searchQueries.push(`${originalTitle} S${seasonStr}E${episodeStr}`);
-                searchQueries.push(`${originalTitle} S${seasonStr}`);
-                searchQueries.push(`${originalTitle} Stagione ${season}`);
-                searchQueries.push(`${originalTitle} Season ${season}`);
-                searchQueries.push(originalTitle);
-            } else if (type === 'movie') {
-                searchQueries.push(`${originalTitle} ${mediaDetails.year}`);
-                searchQueries.push(originalTitle);
+        if (originalTitle && type === 'series' && !kitsuId) {
+            console.log(`🌍 Adding original title queries...`);
+            addQueriesForTitle(originalTitle, 'Original title');
+        } else if (originalTitle && type === 'movie') {
+            searchQueries.push(`${originalTitle} ${mediaDetails.year}`);
+            searchQueries.push(originalTitle);
+            // Also add short version if it has ":"
+            if (originalTitle.includes(':')) {
+                const shortOriginal = originalTitle.split(':')[0].trim();
+                searchQueries.push(`${shortOriginal} ${mediaDetails.year}`);
+                searchQueries.push(shortOriginal);
             }
         }
         
         // Rimuovi duplicati e logga
         finalSearchQueries = [...new Set(searchQueries)];
-        console.log(`📚 Final search queries:`, finalSearchQueries);
+        console.log(`📚 Final search queries (${finalSearchQueries.length} total):`, finalSearchQueries);
         // --- FINE MODIFICA ---
         
         } // Close else block (skip live search if DB/FTS has results)
