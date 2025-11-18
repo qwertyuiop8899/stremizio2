@@ -3826,13 +3826,13 @@ async function handleStream(type, id, config, workerOrigin) {
             cacheChecks.push(
                 (async () => {
                     // ⚠️ instantAvailability is DISABLED by RealDebrid (error_code 37)
-                    // Strategy: Use DB cache (5-day TTL) + mark as cached on successful unrestrict
+                    // Strategy: Use DB cache (10-day TTL) + mark as cached on successful unrestrict
                     
-                    // STEP 1: Check DB cache for known cached torrents (< 5 days)
+                    // STEP 1: Check DB cache for known cached torrents (< 10 days)
                     let dbCachedResults = {};
                     if (dbEnabled) {
                         dbCachedResults = await dbHelper.getRdCachedAvailability(hashes);
-                        console.log(`💾 [DB Cache] ${Object.keys(dbCachedResults).length}/${hashes.length} hashes found in cache (< 5 days)`);
+                        console.log(`💾 [DB Cache] ${Object.keys(dbCachedResults).length}/${hashes.length} hashes found in cache (< 10 days)`);
                     }
                     
                     // STEP 2: Set DB cached results
@@ -4527,6 +4527,48 @@ export default async function handler(req, res) {
         }
     }
 
+    // ✅ Configure endpoint - Opens with existing config preloaded
+    if (url.pathname === '/configure' || url.pathname.endsWith('/configure')) {
+        try {
+            // Extract config from URL if present (e.g., /{config}/configure)
+            const pathParts = url.pathname.split('/');
+            let existingConfig = null;
+            
+            // Check if config is in path (/{config}/configure)
+            if (pathParts.length >= 2 && pathParts[1] && pathParts[1] !== 'configure') {
+                try {
+                    existingConfig = JSON.parse(atob(pathParts[1]));
+                    console.log('📝 [Configure] Loaded existing config from URL path');
+                } catch (e) {
+                    console.warn('⚠️ [Configure] Failed to parse config from path:', e.message);
+                }
+            }
+            
+            // Read template and inject existing config as JSON
+            const templatePath = path.join(process.cwd(), 'template.html');
+            let templateHtml = await fs.readFile(templatePath, 'utf-8');
+            
+            // Inject existing config into template (if present)
+            if (existingConfig) {
+                const configJson = JSON.stringify(existingConfig);
+                // Insert script before </body> to preload config
+                const configScript = `
+                    <script>
+                    window.EXISTING_CONFIG = ${configJson};
+                    console.log('✅ Existing configuration loaded:', window.EXISTING_CONFIG);
+                    </script>
+                `;
+                templateHtml = templateHtml.replace('</body>', `${configScript}</body>`);
+            }
+            
+            res.setHeader('Content-Type', 'text/html;charset=UTF-8');
+            return res.status(200).send(templateHtml);
+        } catch (e) {
+            console.error("Error reading template.html:", e);
+            return res.status(500).send('Template not found.');
+        }
+    }
+
     // ✅ MediaFlow Proxy Endpoint - Server-side proxying
     try {
         // Stremio manifest
@@ -4545,7 +4587,8 @@ export default async function handler(req, res) {
                 behaviorHints: {
                     adult: false,
                     p2p: true, // Indica che può restituire link magnet
-                    configurable: false // Rimosso per evitare il pulsante "Configure" dopo l'installazione
+                    configurable: true, // ✅ Abilita pulsante "Configure" in Stremio
+                    configurationRequired: false // ✅ Non obbligatorio, ma disponibile
                 }
             };
 
