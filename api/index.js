@@ -4103,7 +4103,7 @@ async function handleStream(type, id, config, workerOrigin) {
         console.log(`🔍 [Background Check] dbEnabled=${dbEnabled}, mediaDetails=${!!mediaDetails}, tmdbId=${mediaDetails?.tmdbId}, imdbId=${mediaDetails?.imdbId}, kitsuId=${mediaDetails?.kitsuId}`);
         
         if (dbEnabled && mediaDetails && (mediaDetails.tmdbId || mediaDetails.imdbId || mediaDetails.kitsuId)) {
-            // Filter only CorsaroNero results from the results we already found
+            // 1️⃣ IMMEDIATE: Filter and save CorsaroNero results we already found
             const corsaroResults = results.filter(r => r.source === 'CorsaroNero');
             console.log(`🚀 [Background] Saving ${corsaroResults.length} CorsaroNero results to DB`);
             
@@ -4113,6 +4113,18 @@ async function handleStream(type, id, config, workerOrigin) {
                         await saveCorsaroResultsToDB(corsaroResults, mediaDetails, type, dbHelper, italianTitle);
                     } catch (err) {
                         console.warn(`⚠️ [Background] DB save failed (non-critical):`, err.message);
+                    }
+                });
+            }
+            
+            // 2️⃣ DELAYED: Deep enrichment with Italian title (for movies AND series)
+            if (italianTitle && italianTitle !== mediaDetails.title) {
+                console.log(`🔄 [Background] Scheduling deep enrichment with Italian title "${italianTitle}" (type: ${type})`);
+                setImmediate(async () => {
+                    try {
+                        await enrichDatabaseInBackground(mediaDetails, type, season, episode, dbHelper);
+                    } catch (err) {
+                        console.warn(`⚠️ [Background] Deep enrichment failed (non-critical):`, err.message);
                     }
                 });
             }
