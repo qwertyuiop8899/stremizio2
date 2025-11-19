@@ -3205,8 +3205,15 @@ async function handleStream(type, id, config, workerOrigin) {
                     dbResults = [...dbResults, ...packResults];
                 }
             } else {
-                // Search for movie
+                // Search for movie - both singles AND packs
                 dbResults = await dbHelper.searchByImdbId(mediaDetails.imdbId, type);
+                
+                // 📦 ALSO search pack_files for trilogies/collections
+                const packResults = await dbHelper.searchPacksByImdbId(mediaDetails.imdbId);
+                if (packResults && packResults.length > 0) {
+                    console.log(`💾 [DB] Found ${packResults.length} pack(s) containing this film`);
+                    dbResults = [...dbResults, ...packResults];
+                }
             }
 
             // If found in DB, check if IDs are complete and convert if needed
