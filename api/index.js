@@ -3452,7 +3452,23 @@ async function handleStream(type, id, config, workerOrigin) {
         }
 
         // ✅ 3-TIER STRATEGY: Check if we should skip live search
-        const skipLiveSearch = dbResults.length > 0;
+        let skipLiveSearch = dbResults.length > 0;
+        
+        // 📺 For series: check if at least one result matches the requested season
+        // If all results are from different seasons, we should still do live search
+        if (skipLiveSearch && type === 'series' && season) {
+            const hasMatchingSeason = dbResults.some(result => {
+                const title = result.title || result.torrent_title || '';
+                const seasonPattern = new RegExp(`[Ss](0?${season})[Ee\\s]|[Ss]tagione?\\s*${season}|[Ss]eason\\s*${season}`, 'i');
+                return seasonPattern.test(title);
+            });
+            
+            if (!hasMatchingSeason) {
+                console.log(`⚠️ [3-Tier] Found ${dbResults.length} results but none match Season ${season} - will do live search`);
+                skipLiveSearch = false;
+            }
+        }
+        
         if (skipLiveSearch) {
             console.log(`✅ [3-Tier] Found ${dbResults.length} results from DB/FTS (Tier 1/2)`);
             console.log(`⏭️  [3-Tier] Skipping live search (Tier 3) - will use cached results`);
