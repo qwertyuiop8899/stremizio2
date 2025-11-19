@@ -11,13 +11,19 @@ let pool = null;
 function initDatabase(config = {}) {
   if (pool) return pool;
 
-  // ✅ Use environment variables for database connection
+  // ✅ Support both DATABASE_URL and separate environment variables
+  const poolConfig = process.env.DATABASE_URL 
+    ? { connectionString: process.env.DATABASE_URL }
+    : {
+        host: config.host || process.env.DB_HOST,
+        port: config.port || process.env.DB_PORT,
+        database: config.database || process.env.DB_NAME,
+        user: config.user || process.env.DB_USER,
+        password: config.password || process.env.DB_PASSWORD,
+      };
+
   pool = new Pool({
-    host: config.host || process.env.DB_HOST,
-    port: config.port || process.env.DB_PORT,
-    database: config.database || process.env.DB_NAME,
-    user: config.user || process.env.DB_USER,
-    password: config.password || process.env.DB_PASSWORD,
+    ...poolConfig,
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000, // Vercel timeout-friendly
@@ -673,6 +679,109 @@ async function updateTorrentsWithIds(infoHashes, imdbId, tmdbId) {
   }
 }
 
+/**
+ * Search pack files by IMDb ID
+ * Returns all packs that contain the specified film
+ * @param {string} imdbId - IMDb ID of the film
+ * @returns {Promise<Array>} Array of pack torrents with file info
+ */
+async function searchPacksByImdbId(imdbId) {
+  if (!pool) throw new Error('Database not initialized');
+  
+  try {
+    console.log(`💾 [DB] Searching packs containing film: ${imdbId}`);
+    
+    const query = `
+      SELECT 
+        t.info_hash,
+        t.provider,
+        t.title,
+        t.size,
+        t.quality,
+        t.type,
+        t.all_imdb_ids,
+        pf.file_index,
+        pf.file_path,
+        pf.file_size,
+        pf.imdb_id as film_imdb_id
+      FROM torrents t
+      INNER JOIN pack_files pf ON t.info_hash = pf.pack_hash
+      WHERE pf.imdb_id = $1
+      ORDER BY t.size DESC
+    `;
+    
+    const result = await pool.query(query, [imdbId]);
+    console.log(`   ✅ Found ${result.rows.length} pack(s) containing ${imdbId}`);
+    
+    return result.rows;
+  } catch (error) {
+    console.error(`❌ Error searching packs by IMDb ${imdbId}:`, error.message);
+    return [];
+  }
+}
+
+/**
+ * Insert pack files mapping
+ * @param {Array} packFiles - Array of {pack_hash, imdb_id, file_index, file_path, file_size}
+ * @returns {Promise<number>} Number of inserted records
+ */
+async function insertPackFiles(packFiles) {
+  if (!pool) throw new Error('Database not initialized');
+  if (!packFiles || packFiles.length === 0) return 0;
+  
+  try {
+    const values = [];
+    const params = [];
+    let paramIndex = 1;
+    
+    packFiles.forEach(pf => {
+      values.push(`($${paramIndex}, $${paramIndex + 1}, $${paramIndex + 2}, $${paramIndex + 3}, $${paramIndex + 4})`);
+      params.push(pf.pack_hash, pf.imdb_id, pf.file_index, pf.file_path, pf.file_size);
+      paramIndex += 5;
+    });
+    
+    const query = `
+      INSERT INTO pack_files (pack_hash, imdb_id, file_index, file_path, file_size)
+      VALUES ${values.join(', ')}
+      ON CONFLICT (pack_hash, imdb_id) DO UPDATE SET
+        file_path = EXCLUDED.file_path,
+        file_size = EXCLUDED.file_size
+    `;
+    
+    const result = await pool.query(query, params);
+    console.log(`   ✅ Inserted/updated ${result.rowCount} pack file mappings`);
+    
+    return result.rowCount;
+  } catch (error) {
+    console.error('❌ Error inserting pack files:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get pack files for a specific pack
+ * @param {string} packHash - InfoHash of the pack
+ * @returns {Promise<Array>} Array of file mappings
+ */
+async function getPackFiles(packHash) {
+  if (!pool) throw new Error('Database not initialized');
+  
+  try {
+    const query = `
+      SELECT imdb_id, file_index, file_path, file_size
+      FROM pack_files
+      WHERE pack_hash = $1
+      ORDER BY file_index ASC
+    `;
+    
+    const result = await pool.query(query, [packHash]);
+    return result.rows;
+  } catch (error) {
+    console.error(`❌ Error getting pack files for ${packHash}:`, error.message);
+    return [];
+  }
+}
+
 module.exports = {
   initDatabase,
   searchByImdbId,
@@ -687,5 +796,8 @@ module.exports = {
   deleteFileInfo,
   getImdbIdByHash,
   updateTorrentsWithIds,
+  searchPacksByImdbId,
+  insertPackFiles,
+  getPackFiles,
   closeDatabase
 };
