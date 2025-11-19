@@ -53,18 +53,19 @@ async function searchByImdbId(imdbId, type = null) {
         seeders, 
         imdb_id, 
         tmdb_id,
+        all_imdb_ids,
         cached_rd,
         last_cached_check,
         file_index,
         file_title
       FROM torrents 
-      WHERE imdb_id = $1
+      WHERE (imdb_id = $1 OR all_imdb_ids @> $2)
     `;
     
-    const params = [imdbId];
+    const params = [imdbId, JSON.stringify([imdbId])];
     
     if (type) {
-      query += ' AND type = $2';
+      query += ' AND type = $3';
       params.push(type);
     }
     
@@ -102,6 +103,7 @@ async function searchByTmdbId(tmdbId, type = null) {
         seeders, 
         imdb_id, 
         tmdb_id,
+        all_imdb_ids,
         cached_rd,
         last_cached_check,
         file_index,
@@ -277,7 +279,7 @@ async function getRdCachedAvailability(hashes) {
   try {
     const lowerHashes = hashes.map(h => h.toLowerCase());
     
-    // Get cached results that are less than 5 days old
+    // Get cached results that are less than 10 days old
     const query = `
       SELECT info_hash, cached_rd, last_cached_check
       FROM torrents
@@ -340,8 +342,9 @@ async function batchInsertTorrents(torrents) {
           )
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
           ON CONFLICT (info_hash) DO UPDATE SET
-            imdb_id = COALESCE(EXCLUDED.imdb_id, torrents.imdb_id),
-            tmdb_id = COALESCE(EXCLUDED.tmdb_id, torrents.tmdb_id),
+            imdb_id = COALESCE(torrents.imdb_id, EXCLUDED.imdb_id),
+            tmdb_id = COALESCE(torrents.tmdb_id, EXCLUDED.tmdb_id),
+            size = CASE WHEN torrents.size = 0 OR torrents.size IS NULL THEN EXCLUDED.size ELSE torrents.size END,
             seeders = GREATEST(EXCLUDED.seeders, torrents.seeders),
             cached_rd = COALESCE(EXCLUDED.cached_rd, torrents.cached_rd),
             last_cached_check = CASE 
@@ -371,14 +374,12 @@ async function batchInsertTorrents(torrents) {
         if (res.rowCount > 0) inserted++;
         
       } catch (error) {
-        // Skip duplicates silently
-        if (!error.message.includes('duplicate key')) {
-          console.warn(`⚠️ [DB] Failed to insert torrent ${torrent.info_hash}:`, error.message);
-        }
+        // Log all errors (even duplicates now get updated)
+        console.warn(`⚠️ [DB] Failed to insert/update torrent ${torrent.info_hash}:`, error.message);
       }
     }
     
-    console.log(`✅ [DB] Batch insert: ${inserted}/${torrents.length} new torrents added`);
+    console.log(`✅ [DB] Batch upsert: ${inserted}/${torrents.length} torrents inserted/updated`);
     return inserted;
     
   } catch (error) {
