@@ -2702,8 +2702,26 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
         
         // ✅ CRITICAL: Extract season number from torrent title
         // Must verify season matches before accepting episode match!
-        const torrentSeasonMatch = lightCleanedTitle.match(/[Ss](\d{1,2})(?:[Ee]\d|\s|$)/);
-        const torrentSeason = torrentSeasonMatch ? parseInt(torrentSeasonMatch[1]) : null;
+        // Try multiple patterns: S01, Season 1, Stagione 01, etc.
+        let torrentSeason = null;
+        
+        // Pattern 1: S01, S1, s05 (most common)
+        const sPattern = lightCleanedTitle.match(/[Ss](\d{1,2})(?:[Ee]\d|\s|$|\.|-)/);
+        if (sPattern) {
+            torrentSeason = parseInt(sPattern[1]);
+        }
+        
+        // Pattern 2: Season 1, Season 01
+        if (!torrentSeason) {
+            const seasonPattern = lightCleanedTitle.match(/\bseason\s*(\d{1,2})\b/i);
+            if (seasonPattern) torrentSeason = parseInt(seasonPattern[1]);
+        }
+        
+        // Pattern 3: Stagione 01, Stagione 1 (Italian)
+        if (!torrentSeason) {
+            const stagionePattern = lightCleanedTitle.match(/\bstagione\s*(\d{1,2})\b/i);
+            if (stagionePattern) torrentSeason = parseInt(stagionePattern[1]);
+        }
         
         console.log(`🔍 [ANIME SEASON] Torrent has season: ${torrentSeason || 'NONE'}, requested: S${seasonNum}E${episodeNum} (abs: ${useAbsoluteEpisode})`);
         
