@@ -4101,16 +4101,15 @@ async function handleStream(type, id, config, workerOrigin) {
             filteredResults = filteredResults.filter(result => {
                 // For Kitsu anime, we need to check BOTH:
                 // 1. Absolute episode number (141) - primary for anime with absolute numbering like One Piece
-                // 2. Season/Episode format (S01E05) - fallback for season-based packs
-                // Use absolute episode as PRIMARY episodeNum for matching
-                const episodeToMatch = kitsuId && mediaDetails.absoluteEpisode ? mediaDetails.absoluteEpisode : parseInt(episode);
+                // 2. Season/Episode format (S03E01) - fallback for season-based packs
+                // CRITICAL: episodeNum parameter = SEASON episode (not absolute!)
                 const match = isExactEpisodeMatch(
                     result.title || result.websiteTitle,
                     mediaDetails.titles || mediaDetails.title,
                     parseInt(season),
-                    episodeToMatch, // Use absolute episode for Kitsu
+                    parseInt(episode), // Season episode (e.g., 1 for S03E01)
                     !!kitsuId,
-                    mediaDetails.absoluteEpisode // Also pass for reference
+                    mediaDetails.absoluteEpisode // Absolute episode (e.g., 38)
                 );
                 
                 if (!match) {
