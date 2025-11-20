@@ -2684,17 +2684,8 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
         }
     }
     
-    if (!titleIsAMatch) {
-        if (isDebugTarget) {
-            console.log(`    ❌ Title matching FAILED for "${torrentTitle.substring(0,60)}"`);
-        }
-        return false;
-    }
-    
-    if (isDebugTarget) {
-        console.log(`    ✅ Title matching PASSED, checking episode patterns...`);
-    }
-    
+    // ✅ FOR ANIME: Check ranges FIRST, even if title doesn't match perfectly
+    // This is because anime packs often have inconsistent title formatting
     if (isAnime) {
         // ✅ ANIME: Match episode ranges on LIGHT cleaned title (preserves dots/dashes)
         // For Kitsu anime, torrents use INCONSISTENT numbering:
@@ -2788,6 +2779,18 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
         
         console.log(`❌ [ANIME] Episode match for "${torrentTitle.substring(0, 80)}" Ep.${episodeNum}`);
         return false;
+    }
+    
+    // ✅ FOR NON-ANIME: Check title match FIRST
+    if (!titleIsAMatch) {
+        if (isDebugTarget) {
+            console.log(`    ❌ Title matching FAILED for "${torrentTitle.substring(0,60)}"`);
+        }
+        return false;
+    }
+    
+    if (isDebugTarget) {
+        console.log(`    ✅ Title matching PASSED, checking episode patterns...`);
     }
     
     const seasonStr = String(seasonNum).padStart(2, '0');
@@ -3939,7 +3942,9 @@ async function handleStream(type, id, config, workerOrigin) {
                         torrentTitle, 
                         mediaDetails.titles || mediaDetails.title, 
                         seasonNum, 
-                        episodeNum
+                        episodeNum,
+                        !!kitsuId,  // isAnime flag
+                        mediaDetails.absoluteEpisode  // absolute episode for Kitsu
                     );
                     
                     // DEBUG: Log rejected torrents
