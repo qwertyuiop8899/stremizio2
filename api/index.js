@@ -6485,12 +6485,13 @@ export default async function handler(req, res) {
                 
                 // ✅ Proxy through MediaFlow if configured
                 if (userConfig.mediaflow_url && userConfig.mediaflow_password) {
-                const mediaflowConfig = {
-                    url: userConfig.mediaflow_url,
-                    password: userConfig.mediaflow_password
-                };
-                finalStreamUrl = await proxyThroughMediaFlow(finalStreamUrl, mediaflowConfig, null);
-            }
+                    const mediaflowConfig = {
+                        url: userConfig.mediaflow_url,
+                        password: userConfig.mediaflow_password
+                    };
+                    // Note: If this fails, it will be caught by the outer catch block and return a 500 error.
+                    finalStreamUrl = await proxyThroughMediaFlow(finalStreamUrl, mediaflowConfig, null);
+                }
             
             console.log(`🚀 Redirecting to personal stream`);                res.setHeader('Location', finalStreamUrl);
                 return res.status(302).end();
