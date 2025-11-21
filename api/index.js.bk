@@ -3748,11 +3748,12 @@ async function handleStream(type, id, config, workerOrigin) {
             }
         }
 
-        // ✅ 3-TIER STRATEGY: Check if we should skip live search
+        // ✅ 3-TIER STRATEGY: Check if we should skip live search FOR CORSARO (Tier 1/2 -> Tier 3)
+        // Knaben and UIndex will ALWAYS run if enabled (Parallel Flow)
         let skipLiveSearch = dbResults.length > 0;
         
         // 📺 For series: check if at least one result matches the requested season
-        // If all results are from different seasons, we should still do live search
+        // If all results are from different seasons, we should still do live search for Corsaro
         if (skipLiveSearch && type === 'series' && season) {
             const hasMatchingSeason = dbResults.some(result => {
                 const title = result.title || result.torrent_title || '';
@@ -3761,16 +3762,15 @@ async function handleStream(type, id, config, workerOrigin) {
             });
             
             if (!hasMatchingSeason) {
-                console.log(`⚠️ [3-Tier] Found ${dbResults.length} results but none match Season ${season} - will do live search`);
+                console.log(`⚠️ [3-Tier] Found ${dbResults.length} results but none match Season ${season} - will do live search for Corsaro`);
                 skipLiveSearch = false;
             }
         }
         
         if (skipLiveSearch) {
-            console.log(`✅ [3-Tier] Found ${dbResults.length} results from DB/FTS (Tier 1/2)`);
-            console.log(`⏭️  [3-Tier] Skipping live search (Tier 3) - will use cached results`);
+            console.log(`✅ [3-Tier] Found ${dbResults.length} results from DB/FTS. Skipping Corsaro live search.`);
         } else {
-            console.log(`🔍 [3-Tier] No results from DB/FTS (Tier 1/2) - proceeding to live search (Tier 3)`);
+            console.log(`🔍 [3-Tier] No results from DB/FTS. Proceeding to Corsaro live search.`);
         }
 
         // Build search queries (ALWAYS - needed for both live search AND enrichment)
@@ -3900,9 +3900,8 @@ async function handleStream(type, id, config, workerOrigin) {
         const TOTAL_RESULTS_TARGET = 50; // Stop searching when we have enough results to avoid excessive subrequests.
         let totalQueries = 0;
         
-        // Only perform live search if no DB/FTS results
-        if (!skipLiveSearch) {
-            console.log(`🔍 [3-Tier] Starting live search (Tier 3)...`);
+        // ✅ LIVE SEARCH (Tier 3 + Parallel Flows)
+        console.log(`🔍 Starting live search...`);
 
         // ✅ Initialize Jackettio if ENV vars are set
         let jackettioInstance = null;
@@ -3916,10 +3915,10 @@ async function handleStream(type, id, config, workerOrigin) {
         }
 
         for (const query of finalSearchQueries) {
-            console.log(`\n🔍 Searching all sources for: "${query}"`);
+            console.log(`\n🔍 Searching sources for: "${query}"`);
 
             // Stop searching if we have a good number of results to process.
-            if (allRawResults.length >= TOTAL_RESULTS_TARGET * 4) { // *4 because we have 4 sources (including Jackettio)
+            if (allRawResults.length >= TOTAL_RESULTS_TARGET * 4) { 
                 console.log(`🎯 Target of ~${TOTAL_RESULTS_TARGET} unique results likely reached. Stopping further searches.`);
                 break;
             }
@@ -3932,10 +3931,10 @@ async function handleStream(type, id, config, workerOrigin) {
             const useCorsaroNero = config.use_corsaronero !== false; // Default true
             const useKnaben = config.use_knaben !== false; // Default true
             
-            // 🔥 FILTER: Skip UIndex/Knaben for Corsaro-specific queries (Stagione, Complete, etc.)
-            // This prevents 429 errors on UIndex by reducing the number of redundant queries
-            const isCorsaroSpecific = query.match(/\b(stagione|completa|complete)\b/i);
+            // 🔥 FILTER: Skip UIndex/Knaben for Corsaro-specific queries
+            const isCorsaroSpecific = query.match(/\b(stagione\s+\d+|serie\s+completa)\b/i);
             
+            // 1. UIndex (Always run if enabled)
             if (useUIndex) {
                 if (!isCorsaroSpecific) {
                     console.log('📊 UIndex enabled for search');
@@ -3946,20 +3945,22 @@ async function handleStream(type, id, config, workerOrigin) {
                 } else {
                     console.log('⏭️  Skipping UIndex for Corsaro-specific query');
                 }
-            } else {
-                console.log('⏭️  UIndex disabled by user');
             }
             
+            // 2. CorsaroNero (Run ONLY if NOT skipped by DB/FTS)
             if (useCorsaroNero) {
-                console.log('🏴‍☠️ CorsaroNero enabled for search');
-                searchPromises.push({
-                    name: 'CorsaroNero',
-                    promise: fetchCorsaroNeroData(query, searchType)
-                });
-            } else {
-                console.log('⏭️  CorsaroNero disabled by user');
+                if (!skipLiveSearch) {
+                    console.log('🏴‍☠️ CorsaroNero enabled for search');
+                    searchPromises.push({
+                        name: 'CorsaroNero',
+                        promise: fetchCorsaroNeroData(query, searchType)
+                    });
+                } else {
+                    console.log('⏭️  Skipping CorsaroNero (results found in DB/FTS)');
+                }
             }
             
+            // 3. Knaben (Always run if enabled)
             if (useKnaben) {
                 if (!isCorsaroSpecific) {
                     console.log('🦉 Knaben enabled for search');
@@ -3970,11 +3971,9 @@ async function handleStream(type, id, config, workerOrigin) {
                 } else {
                     console.log('⏭️  Skipping Knaben for Corsaro-specific query');
                 }
-            } else {
-                console.log('⏭️  Knaben disabled by user');
             }
 
-            // Add Jackettio if configured
+            // 4. Jackettio (Always run if configured)
             if (jackettioInstance) {
                 console.log('🔍 Jackettio enabled for search');
                 searchPromises.push({
@@ -3984,7 +3983,7 @@ async function handleStream(type, id, config, workerOrigin) {
             }
             
             if (searchPromises.length === 0) {
-                console.log('⚠️  No search sites enabled! Skipping search.');
+                console.log('⚠️  No search sites enabled or all skipped! Skipping query.');
                 continue; // Skip to next query
             }
 
@@ -4006,8 +4005,6 @@ async function handleStream(type, id, config, workerOrigin) {
                 await new Promise(resolve => setTimeout(resolve, 250));
             }
         }
-        
-        } // Close if (!skipLiveSearch) - end of live search block
 
         console.log(`🔎 Found a total of ${allRawResults.length} raw results from all sources. Performing smart deduplication...`);
 
