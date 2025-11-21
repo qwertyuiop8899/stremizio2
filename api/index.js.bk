@@ -4416,53 +4416,63 @@ async function handleStream(type, id, config, workerOrigin) {
                     }
                     
                     const isCached = cacheType === 'global' || cacheType === 'personal';
-                    const cachedIcon = isCached ? '⚡ ' : '📥🧲 ';
+                    const cacheStatusIcon = isCached ? '⚡' : '⏬';
                     const errorIcon = streamError ? '⚠️ ' : '';
                     
-                    const streamName = [
-                        cachedIcon + errorIcon + '🔵 ',
-                        `[${result.source}]`,
-                        packIcon + languageIcon,  // ← Pack icon + Language icon
-                        qualitySymbol,
-                        qualityDisplay,
-                        `👥 ${result.seeders || 0}/${result.leechers || 0}`,
-                        result.size && result.size !== 'Unknown' ? `💾 ${result.size}` : null
-                    ].filter(Boolean).join(' | ');
+                    // New Name Format: IL 🏴‍☠️ 🔮 [🔵] [⚡] \n [Quality]
+                    const streamName = `IL 🏴‍☠️ 🔮 [🔵] [${cacheStatusIcon}]${errorIcon}\n${result.quality || 'Unknown'}`;
                     
                     const debugInfo = streamError ? `\n⚠️ Stream error: ${streamError}` : '';
-                    let cacheInfoText;
-                    if (cacheType === 'global') {
-                        const variantInfo = rdCacheData?.variantsCount > 1 
-                            ? ` (${rdCacheData.variantsCount} varianti disponibili)` 
-                            : '';
-                        cacheInfoText = `🔗 Streaming da cache Globale Real-Debrid${variantInfo}`;
-                    } else if (cacheType === 'personal') {
-                        cacheInfoText = '🔗 Streaming da cache Personale Real-Debrid';
-                    } else {
-                        cacheInfoText = '📥🧲 Aggiungi a Real-Debrid (download necessario)';
-                    }
                     
-                    // 🔥 Show "Pack Name / Episode Title" for series (user-friendly)
-                    let displayTitle = result.title;
-                    if (type === 'series' && season && episode && mediaDetails) {
-                        // Check if we have the real file_title from DB
+                    // New Title Format
+                    let titleLine1 = '';
+                    let titleLine2 = '';
+                    
+                    // Check if it's a pack
+                    const isPack = isSeasonPack(result.title) || (result.fileIndex !== undefined && result.fileIndex !== null);
+                    
+                    if (isPack) {
+                        titleLine1 = `🗳️ ${result.title}`;
+                        // If we have a specific file title (from DB or constructed), show it
                         if (result.file_title) {
-                            // Use the actual filename from DB
-                            displayTitle = `${result.title}\n📂 ${result.file_title}`;
+                            titleLine2 = `📂 ${result.file_title}`;
+                        } else if (type === 'series' && season && episode && mediaDetails) {
+                             const seasonStr = String(season).padStart(2, '0');
+                             const episodeStr = String(episode).padStart(2, '0');
+                             titleLine2 = `📂 ${mediaDetails.title} S${seasonStr}E${episodeStr}`;
                         } else {
-                            // Fallback to constructed title
-                            const seasonStr = String(season).padStart(2, '0');
-                            const episodeStr = String(episode).padStart(2, '0');
-                            const episodeTitle = `${mediaDetails.title} S${seasonStr}E${episodeStr}`;
-                            displayTitle = `${result.title}\n📂 ${episodeTitle}`;
+                             titleLine2 = `📂 ${result.filename || result.title}`;
                         }
+                    } else {
+                        titleLine1 = `🎬 ${result.title}`;
                     }
                     
+                    const sizeLine = `💾 ${result.size || 'Unknown'}`;
+                    
+                    // Languages
+                    const langInfo = getLanguageInfo(result.title, italianTitle);
+                    const langDisplay = langInfo.isMulti ? '🇬🇧 + 🇮🇹' : (langInfo.isItalian ? '🇮🇹' : '🇬🇧');
+                    const languageLine = `🗣️ ${langDisplay}`;
+
+                    // Normalize provider name
+                    let providerName = result.source;
+                    if (providerName.toLowerCase().includes('corsaro')) {
+                        providerName = 'IlCorsaroNero';
+                    }
+
+                    const providerLine = `🔗 ${providerName} 👥 ${result.seeders || 0}`;
+                    
+                    // MFP
+                    const mfpActive = config.mediaflow_url && config.mediaflow_password;
+                    const lastLine = mfpActive ? '🌐 MFP' : '';
+
                     const streamTitle = [
-                        `🎬 ${displayTitle}`,
-                        `📡 ${result.source} | 💾 ${result.size} | 👥 ${result.seeders || 0} seeds`,
-                        cacheInfoText,
-                        result.categories?.[0] ? `📂 ${result.categories[0]}` : '',
+                        titleLine1,
+                        titleLine2,
+                        sizeLine,
+                        languageLine,
+                        providerLine,
+                        lastLine,
                         debugInfo
                     ].filter(Boolean).join('\n');
                     
@@ -4512,49 +4522,54 @@ async function handleStream(type, id, config, workerOrigin) {
                     }
                     
                     const isCached = cacheType === 'global' || cacheType === 'personal';
-                    const cachedIcon = isCached ? '⚡ ' : '📥🧲 ';
+                    const cacheStatusIcon = isCached ? '⚡' : '⏬';
                     const errorIcon = streamError ? '⚠️ ' : '';
                     
-                    const streamName = [
-                        cachedIcon + errorIcon + '📦 ',
-                        `[${result.source}]`,
-                        packIcon + languageIcon,  // ← Pack icon + Language icon
-                        qualitySymbol,
-                        qualityDisplay,
-                        `👥 ${result.seeders || 0}/${result.leechers || 0}`,
-                        result.size && result.size !== 'Unknown' ? `💾 ${result.size}` : null
-                    ].filter(Boolean).join(' | ');
+                    const streamName = `IL 🏴‍☠️ 🔮 [📦] [${cacheStatusIcon}]${errorIcon}\n${result.quality || 'Unknown'}`;
                     
-                    let cacheInfoText;
-                    if (cacheType === 'global') {
-                        cacheInfoText = '🔗 Streaming da cache Globale Torbox';
-                    } else if (cacheType === 'personal') {
-                        cacheInfoText = '🔗 Streaming da cache Personale Torbox';
-                    } else {
-                        cacheInfoText = '📥🧲 Aggiungi a Torbox';
-                    }
+                    // New Title Format
+                    let titleLine1 = '';
+                    let titleLine2 = '';
                     
-                    // 🔥 Show "Pack Name / Episode Title" for series (user-friendly)
-                    let displayTitle = result.title;
-                    if (type === 'series' && season && episode && mediaDetails) {
-                        // Check if we have the real file_title from DB
+                    const isPack = isSeasonPack(result.title) || (result.fileIndex !== undefined && result.fileIndex !== null);
+                    
+                    if (isPack) {
+                        titleLine1 = `🗳️ ${result.title}`;
                         if (result.file_title) {
-                            // Use the actual filename from DB
-                            displayTitle = `${result.title}\n📂 ${result.file_title}`;
+                            titleLine2 = `📂 ${result.file_title}`;
+                        } else if (type === 'series' && season && episode && mediaDetails) {
+                             const seasonStr = String(season).padStart(2, '0');
+                             const episodeStr = String(episode).padStart(2, '0');
+                             titleLine2 = `📂 ${mediaDetails.title} S${seasonStr}E${episodeStr}`;
                         } else {
-                            // Fallback to constructed title
-                            const seasonStr = String(season).padStart(2, '0');
-                            const episodeStr = String(episode).padStart(2, '0');
-                            const episodeTitle = `${mediaDetails.title} S${seasonStr}E${episodeStr}`;
-                            displayTitle = `${result.title}\n📂 ${episodeTitle}`;
+                             titleLine2 = `📂 ${result.filename || result.title}`;
                         }
+                    } else {
+                        titleLine1 = `🎬 ${result.title}`;
                     }
                     
+                    const sizeLine = `💾 ${result.size || 'Unknown'}`;
+                    
+                    const langInfo = getLanguageInfo(result.title, italianTitle);
+                    const langDisplay = langInfo.isMulti ? '🇬🇧 + 🇮🇹' : (langInfo.isItalian ? '🇮🇹' : '🇬🇧');
+                    const languageLine = `🗣️ ${langDisplay}`;
+
+                    // Normalize provider name
+                    let providerName = result.source;
+                    if (providerName.toLowerCase().includes('corsaro')) {
+                        providerName = 'IlCorsaroNero';
+                    }
+
+                    const providerLine = `🔗 ${providerName} 👥 ${result.seeders || 0}`;
+                    const lastLine = '';
+
                     const streamTitle = [
-                        `🎬 ${displayTitle}`,
-                        `📡 ${result.source} | 💾 ${result.size} | 👥 ${result.seeders || 0} seeds`,
-                        cacheInfoText,
-                        result.categories?.[0] ? `📂 ${result.categories[0]}` : '',
+                        titleLine1,
+                        titleLine2,
+                        sizeLine,
+                        languageLine,
+                        providerLine,
+                        lastLine
                     ].filter(Boolean).join('\n');
                     
                     streams.push({
@@ -4596,47 +4611,54 @@ async function handleStream(type, id, config, workerOrigin) {
                     }
                     
                     const isCached = cacheType === 'global';
-                    const cachedIcon = isCached ? '⚡ ' : '📥🧲 ';
+                    const cacheStatusIcon = isCached ? '⚡' : '⏬';
                     const errorIcon = streamError ? '⚠️ ' : '';
                     
-                    const streamName = [
-                        cachedIcon + errorIcon + '🅰️ ',
-                        `[${result.source}]`,
-                        packIcon + languageIcon,  // ← Pack icon + Language icon
-                        qualitySymbol,
-                        qualityDisplay,
-                        `👥 ${result.seeders || 0}/${result.leechers || 0}`,
-                        result.size && result.size !== 'Unknown' ? `💾 ${result.size}` : null
-                    ].filter(Boolean).join(' | ');
+                    const streamName = `IL 🏴‍☠️ 🔮 [🅰️] [${cacheStatusIcon}]${errorIcon}\n${result.quality || 'Unknown'}`;
                     
-                    let cacheInfoText;
-                    if (cacheType === 'global') {
-                        cacheInfoText = '🔗 Streaming da cache Globale AllDebrid';
-                    } else {
-                        cacheInfoText = '📥🧲 Aggiungi a AllDebrid';
-                    }
+                    // New Title Format
+                    let titleLine1 = '';
+                    let titleLine2 = '';
                     
-                    // 🔥 Show "Pack Name / Episode Title" for series (user-friendly)
-                    let displayTitle = result.title;
-                    if (type === 'series' && season && episode && mediaDetails) {
-                        // Check if we have the real file_title from DB
+                    const isPack = isSeasonPack(result.title) || (result.fileIndex !== undefined && result.fileIndex !== null);
+                    
+                    if (isPack) {
+                        titleLine1 = `🗳️ ${result.title}`;
                         if (result.file_title) {
-                            // Use the actual filename from DB
-                            displayTitle = `${result.title}\n📂 ${result.file_title}`;
+                            titleLine2 = `📂 ${result.file_title}`;
+                        } else if (type === 'series' && season && episode && mediaDetails) {
+                             const seasonStr = String(season).padStart(2, '0');
+                             const episodeStr = String(episode).padStart(2, '0');
+                             titleLine2 = `📂 ${mediaDetails.title} S${seasonStr}E${episodeStr}`;
                         } else {
-                            // Fallback to constructed title
-                            const seasonStr = String(season).padStart(2, '0');
-                            const episodeStr = String(episode).padStart(2, '0');
-                            const episodeTitle = `${mediaDetails.title} S${seasonStr}E${episodeStr}`;
-                            displayTitle = `${result.title}\n📂 ${episodeTitle}`;
+                             titleLine2 = `📂 ${result.filename || result.title}`;
                         }
+                    } else {
+                        titleLine1 = `🎬 ${result.title}`;
                     }
                     
+                    const sizeLine = `💾 ${result.size || 'Unknown'}`;
+                    
+                    const langInfo = getLanguageInfo(result.title, italianTitle);
+                    const langDisplay = langInfo.isMulti ? '🇬🇧 + 🇮🇹' : (langInfo.isItalian ? '🇮🇹' : '🇬🇧');
+                    const languageLine = `🗣️ ${langDisplay}`;
+
+                    // Normalize provider name
+                    let providerName = result.source;
+                    if (providerName.toLowerCase().includes('corsaro')) {
+                        providerName = 'IlCorsaroNero';
+                    }
+
+                    const providerLine = `🔗 ${providerName} 👥 ${result.seeders || 0}`;
+                    const lastLine = '';
+
                     const streamTitle = [
-                        `🎬 ${displayTitle}`,
-                        `📡 ${result.source} | 💾 ${result.size} | 👥 ${result.seeders || 0} seeds`,
-                        cacheInfoText,
-                        result.categories?.[0] ? `📂 ${result.categories[0]}` : '',
+                        titleLine1,
+                        titleLine2,
+                        sizeLine,
+                        languageLine,
+                        providerLine,
+                        lastLine
                     ].filter(Boolean).join('\n');
                     
                     streams.push({
@@ -4661,21 +4683,51 @@ async function handleStream(type, id, config, workerOrigin) {
                 
                 // ✅ P2P STREAM (if no debrid service enabled)
                 if (!useRealDebrid && !useTorbox && !useAllDebrid) {
-                    const streamName = [
-                        '[P2P]',
-                        `[${result.source}]`,
-                        packIcon + languageIcon,  // ← Pack icon + Language icon
-                        qualitySymbol,
-                        qualityDisplay,
-                        `👥 ${result.seeders || 0}/${result.leechers || 0}`,
-                        result.size && result.size !== 'Unknown' ? `💾 ${result.size}` : null
-                    ].filter(Boolean).join(' | ');
+                    const streamName = `IL 🏴‍☠️ 🔮 [🧲] [⏬]\n${result.quality || 'Unknown'}`;
+
+                    // New Title Format
+                    let titleLine1 = '';
+                    let titleLine2 = '';
+                    
+                    const isPack = isSeasonPack(result.title) || (result.fileIndex !== undefined && result.fileIndex !== null);
+                    
+                    if (isPack) {
+                        titleLine1 = `🗳️ ${result.title}`;
+                        if (result.file_title) {
+                            titleLine2 = `📂 ${result.file_title}`;
+                        } else if (type === 'series' && season && episode && mediaDetails) {
+                             const seasonStr = String(season).padStart(2, '0');
+                             const episodeStr = String(episode).padStart(2, '0');
+                             titleLine2 = `📂 ${mediaDetails.title} S${seasonStr}E${episodeStr}`;
+                        } else {
+                             titleLine2 = `📂 ${result.filename || result.title}`;
+                        }
+                    } else {
+                        titleLine1 = `🎬 ${result.title}`;
+                    }
+                    
+                    const sizeLine = `💾 ${result.size || 'Unknown'}`;
+                    
+                    const langInfo = getLanguageInfo(result.title, italianTitle);
+                    const langDisplay = langInfo.isMulti ? '🇬🇧 + 🇮🇹' : (langInfo.isItalian ? '🇮🇹' : '🇬🇧');
+                    const languageLine = `🗣️ ${langDisplay}`;
+
+                    // Normalize provider name
+                    let providerName = result.source;
+                    if (providerName.toLowerCase().includes('corsaro')) {
+                        providerName = 'IlCorsaroNero';
+                    }
+
+                    const providerLine = `🔗 ${providerName} 👥 ${result.seeders || 0}`;
+                    const lastLine = '';
 
                     const streamTitle = [
-                        `🎬 ${result.title}`,
-                        `📡 ${result.source} | 💾 ${result.size} | 👥 ${result.seeders || 0} seeds`,
-                        '🔗 Link Magnet diretto (P2P)',
-                        result.categories?.[0] ? `📂 ${result.categories[0]}` : ''
+                        titleLine1,
+                        titleLine2,
+                        sizeLine,
+                        languageLine,
+                        providerLine,
+                        lastLine
                     ].filter(Boolean).join('\n');
 
                     // 🔥 P2P Pack Support: Add fileIdx for pack torrents
