@@ -2870,14 +2870,15 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
     ];
     
     if (isDebugTarget) {
-        console.log(`    🔍 Testing episode patterns on normalized: "${normalizedTorrentTitle.substring(0,80)}"`);
+        console.log(`    🔍 Testing episode patterns on lightCleaned: "${lightCleanedTitle.substring(0,80)}"`);
         exactEpisodePatterns.forEach((pattern, i) => {
-            const match = pattern.test(normalizedTorrentTitle);
+            const match = pattern.test(lightCleanedTitle);
             console.log(`      Pattern ${i+1}: ${pattern} → ${match ? '✅ MATCH' : '❌ no match'}`);
         });
     }
     
-    const exactMatch = exactEpisodePatterns.some(pattern => pattern.test(normalizedTorrentTitle));
+    // ✅ Use lightCleanedTitle for regex checks to preserve punctuation (dots, dashes)
+    const exactMatch = exactEpisodePatterns.some(pattern => pattern.test(lightCleanedTitle));
     if (exactMatch) {
         console.log(`✅ [EXACT] Episode match for "${torrentTitle}" S${seasonStr}E${episodeStr}`);
         return true;
@@ -2885,16 +2886,35 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
     
     // ✅ EPISODE RANGE: Check if episode is in a range (e.g., "S06E01-25" contains E06)
     // Pattern: S06E01-25, S06E01-E25, 6x01-25, etc.
-    const episodeRangePattern = new RegExp(
-        `s${seasonStr}e(\\d{1,2})\\s*[-–—]\\s*e?(\\d{1,2})`, 'i'
-    );
-    const rangeMatch = normalizedTorrentTitle.match(episodeRangePattern);
-    if (rangeMatch) {
-        const startEp = parseInt(rangeMatch[1]);
-        const endEp = parseInt(rangeMatch[2]);
-        if (episodeNum >= startEp && episodeNum <= endEp) {
-            console.log(`✅ [EPISODE RANGE] Match for "${torrentTitle}" S${seasonStr}E${startEp}-${endEp} contains E${episodeStr}`);
-            return true;
+    // Must use lightCleanedTitle because normalizedTorrentTitle replaces dashes with spaces!
+    // Expanded patterns to support:
+    // - S01E01-10
+    // - S01E01-E10
+    // - 1x01-10
+    // - Season 1 Episode 1-10
+    // - Stagione 1 Episodio 1-10
+    const episodeRangePatterns = [
+        // Standard S01E01-10 or S01E01-E10
+        new RegExp(`s${seasonStr}e(\\d{1,2})\\s*[-–—]\\s*e?(\\d{1,2})`, 'i'),
+        // 1x01-10
+        new RegExp(`${seasonNum}x(\\d{1,2})\\s*[-–—]\\s*(\\d{1,2})`, 'i'),
+        // Season 1 Episode 1-10 (English)
+        new RegExp(`season\\s*${seasonNum}\\s*episode\\s*(\\d{1,2})\\s*[-–—]\\s*(\\d{1,2})`, 'i'),
+        // Stagione 1 Episodio 1-10 (Italian)
+        new RegExp(`stagione\\s*${seasonNum}\\s*episodio\\s*(\\d{1,2})\\s*[-–—]\\s*(\\d{1,2})`, 'i'),
+        // S01 01-10 (Loose)
+        new RegExp(`s${seasonStr}\\s+(\\d{1,2})\\s*[-–—]\\s*(\\d{1,2})`, 'i')
+    ];
+
+    for (const pattern of episodeRangePatterns) {
+        const rangeMatch = lightCleanedTitle.match(pattern);
+        if (rangeMatch) {
+            const startEp = parseInt(rangeMatch[1]);
+            const endEp = parseInt(rangeMatch[2]);
+            if (episodeNum >= startEp && episodeNum <= endEp) {
+                console.log(`✅ [EPISODE RANGE] Match for "${torrentTitle}" S${seasonStr}E${startEp}-${endEp} contains E${episodeStr}`);
+                return true;
+            }
         }
     }
     
@@ -2954,8 +2974,9 @@ function isExactEpisodeMatch(torrentTitle, showTitleOrTitles, seasonNum, episode
     
     // ✅ MULTI-SEASON RANGE: Check if season is within a range (e.g., "S01-S10" includes S08)
     // Patterns: S01-S10, Season 1-10, Stagione 1-10, S1-S10, etc.
+    // Must use lightCleanedTitle to preserve dashes!
     const multiSeasonRangePattern = /(?:s|season|stagione)\s*(\d{1,2})\s*[-–—]\s*(?:s|season|stagione)?\s*(\d{1,2})/i;
-    const seasonRangeMatch = normalizedTorrentTitle.match(multiSeasonRangePattern);
+    const seasonRangeMatch = lightCleanedTitle.match(multiSeasonRangePattern);
     if (seasonRangeMatch) {
         const startSeason = parseInt(seasonRangeMatch[1]);
         const endSeason = parseInt(seasonRangeMatch[2]);
@@ -4779,50 +4800,75 @@ async function handleStream(type, id, config, workerOrigin) {
             }
         }
         
-        // ✅ Enhanced sorting: source, italian, cached first, then by quality, then by seeders
+        // ✅ Enhanced sorting: Cached > Resolution > Size > Seeders
         streams.sort((a, b) => {
-            // Funzione per ottenere il punteggio di priorità di un risultato
-            const getPriorityScore = (name) => {
-                if (name.includes('❌')) return 0; // Errori in fondo
-                if (name.includes('⚡')) { // Risultati in cache
-                    if (name.includes('🇮🇹')) return 10; // Italiano
-                    if (name.includes('🌈')) return 9;  // Multi
-                    return 8; // Altro
-                }
-                // Risultati non in cache
-                if (name.includes('🇮🇹')) return 7; // Italiano
-                if (name.includes('🌈')) return 6;  // Multi
-                return 5; // Altro
-            };
-
-            const scoreA = getPriorityScore(a.name);
-            const scoreB = getPriorityScore(b.name);
-
-            if (scoreA !== scoreB) {
-                return scoreB - scoreA; // Ordine decrescente per punteggio
+            // 1. Cached Status (Cached first)
+            // Check for '⚡' in name or _meta.cached
+            const isCachedA = (a._meta && a._meta.cached) || (a.name && a.name.includes('⚡'));
+            const isCachedB = (b._meta && b._meta.cached) || (b.name && b.name.includes('⚡'));
+            
+            if (isCachedA !== isCachedB) {
+                return isCachedA ? -1 : 1; // Cached comes first
             }
             
-            // Se la priorità è la stessa, ordina prima per qualità...
-            const qualityOrder = { '🔥': 5, '⭐': 4, '✅': 3, '📺': 2, '🎬': 1 };
-            const getQualityScore = (name) => {
-                const parts = name.split('|');
-                for (const part of parts) {
-                    const trimmed = part.trim();
-                    if (qualityOrder[trimmed]) return qualityOrder[trimmed];
-                }
+            // 2. Resolution (High to Low)
+            const getResolutionScore = (stream) => {
+                const quality = (stream._meta?.quality || '').toLowerCase();
+                const name = (stream.name || '').toLowerCase();
+                const title = (stream.title || '').toLowerCase();
+                const combined = quality + ' ' + name + ' ' + title;
+                
+                if (combined.includes('2160') || combined.includes('4k')) return 2160;
+                if (combined.includes('1080')) return 1080;
+                if (combined.includes('720')) return 720;
+                if (combined.includes('480')) return 480;
                 return 0;
             };
-
-            const qualityA = getQualityScore(a.name);
-            const qualityB = getQualityScore(b.name);
-
-            if (qualityA !== qualityB) {
-                return qualityB - qualityA;
+            
+            const resA = getResolutionScore(a);
+            const resB = getResolutionScore(b);
+            
+            if (resA !== resB) {
+                return resB - resA; // Higher resolution first
             }
             
-            // ...e infine per numero di seeders
-            const seedsA = parseInt(a.name.match(/👥 (\d+)/)?.[1]) || 0;
-            const seedsB = parseInt(b.name.match(/👥 (\d+)/)?.[1]) || 0;
+            // 3. Size (Big to Small)
+            const getSizeInBytes = (stream) => {
+                let sizeStr = stream._meta?.originalSize;
+                
+                // Fallback: try to find size in title (e.g. "💾 1.5 GB")
+                if (!sizeStr && stream.title) {
+                    const match = stream.title.match(/💾\s*(.+)/);
+                    if (match) sizeStr = match[1];
+                }
+                
+                if (!sizeStr) return 0;
+                
+                // Parse "1.5 GB", "700 MB", etc.
+                const match = sizeStr.match(/([\d.]+)\s*([a-zA-Z]+)/);
+                if (!match) return 0;
+                
+                const val = parseFloat(match[1]);
+                const unit = match[2].toUpperCase();
+                
+                let multiplier = 1;
+                if (unit.includes('GB')) multiplier = 1024 * 1024 * 1024;
+                else if (unit.includes('MB')) multiplier = 1024 * 1024;
+                else if (unit.includes('KB')) multiplier = 1024;
+                
+                return val * multiplier;
+            };
+            
+            const sizeA = getSizeInBytes(a);
+            const sizeB = getSizeInBytes(b);
+            
+            if (sizeA !== sizeB) {
+                return sizeB - sizeA; // Larger size first
+            }
+            
+            // 4. Seeders (Fallback)
+            const seedsA = a._meta?.seeders || 0;
+            const seedsB = b._meta?.seeders || 0;
             return seedsB - seedsA;
         });
         const cachedCount = streams.filter(s => s.name.includes('⚡')).length;
