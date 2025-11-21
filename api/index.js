@@ -1146,6 +1146,8 @@ function sortByQualityAndSeeders(results) {
 
 function limitResultsByResolution(streams, limit) {
     if (!limit || limit <= 0) return streams;
+    
+    console.log(`✂️ START LIMIT: ${streams.length} streams, limit=${limit}`);
 
     const counts = {
         '4k': 0,
@@ -1155,24 +1157,37 @@ function limitResultsByResolution(streams, limit) {
         'other': 0
     };
     
-    return streams.filter(stream => {
-        const quality = (stream._meta?.quality || '').toLowerCase();
-        const name = (stream.name || '').toLowerCase();
-        const title = (stream.title || '').toLowerCase();
-        const combined = quality + ' ' + name + ' ' + title;
-        
-        let type = 'other';
-        if (combined.includes('2160') || combined.includes('4k')) type = '4k';
-        else if (combined.includes('1080')) type = '1080p';
-        else if (combined.includes('720')) type = '720p';
-        else if (combined.includes('480')) type = '480p';
-        
-        if (counts[type] < limit) {
-            counts[type]++;
-            return true;
+    const filtered = streams.filter(stream => {
+        try {
+            const quality = (stream._meta?.quality || '').toLowerCase();
+            const name = (stream.name || '').toLowerCase();
+            const title = (stream.title || '').toLowerCase();
+            const combined = quality + ' ' + name + ' ' + title;
+            
+            let type = 'other';
+            if (combined.includes('2160') || combined.includes('4k')) type = '4k';
+            else if (combined.includes('1080')) type = '1080p';
+            else if (combined.includes('720')) type = '720p';
+            else if (combined.includes('480')) type = '480p';
+            
+            if (counts[type] === undefined) {
+                console.log(`⚠️ Unknown type: ${type}, defaulting to other`);
+                type = 'other';
+            }
+            
+            if (counts[type] < limit) {
+                counts[type]++;
+                return true;
+            }
+            return false;
+        } catch (e) {
+            console.error('❌ Error in filter:', e);
+            return true; // Keep on error
         }
-        return false;
     });
+    
+    console.log(`✂️ END LIMIT: ${filtered.length} streams remaining`);
+    return filtered;
 }
 
 // ✅ NUOVA FUNZIONE: Limita i risultati per qualità
@@ -4525,7 +4540,7 @@ async function handleStream(type, id, config, workerOrigin) {
         }
         
         // ✅ Build streams with enhanced error handling - supports multiple debrid services
-        const streams = [];
+        let streams = [];
         
         for (const result of filteredResults) {
             try {
