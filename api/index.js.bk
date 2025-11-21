@@ -174,9 +174,12 @@ function getLanguageInfo(title, italianMovieTitle = null) {
 
     const lowerTitle = title.toLowerCase();
 
-    // Check for multi-language first
-    if (/\b(multi|dual)\b/i.test(lowerTitle)) {
-        return { icon: '🌈 ', isItalian: false, isMulti: true }; // Rainbow icon for multi-language
+    // Check for explicit multi-language keywords OR presence of both "ita" and "eng"
+    const hasIta = /\b(ita|italian)\b/i.test(lowerTitle);
+    const hasEng = /\b(eng|english)\b/i.test(lowerTitle);
+
+    if (/\b(multi|dual)\b/i.test(lowerTitle) || (hasIta && hasEng)) {
+        return { icon: '🌈 ', isItalian: true, isMulti: true }; // Rainbow icon for multi-language
     }
 
     const isIta = isItalian(title, italianMovieTitle);
@@ -513,96 +516,111 @@ async function fetchKnabenData(searchQuery, type = 'movie') {
         return [];
     }
     
-    console.log(`🦉 [HTML Scraper] Searching Knaben.org for: "${cleanedQuery}"`);
+    console.log(`🦉 [HTML Scraper] Searching Knaben.org for: "${cleanedQuery}" (Pages 1-3)`);
 
-    try {
-        const searchUrl = `${KNABEN_BASE_URL}/search/${encodeURIComponent(cleanedQuery)}/`;
-        
-        const response = await fetch(searchUrl, {
-            headers: { 
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Referer': `${KNABEN_BASE_URL}/`
+    const allStreams = [];
+    const maxPages = 3; // Cycle through first 3 pages
+
+    for (let page = 1; page <= maxPages; page++) {
+        try {
+            // URL format: /search/query/0/page_number
+            // Note: Knaben uses 0 for category (all) and page number starts at 1? Or 0?
+            // Based on user request: /search/query/0/1, /search/query/0/2
+            const searchUrl = `${KNABEN_BASE_URL}/search/${encodeURIComponent(cleanedQuery)}/0/${page}/`;
+            
+            console.log(`🦉 [Page ${page}] Fetching: ${searchUrl}`);
+
+            const response = await fetch(searchUrl, {
+                headers: { 
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Referer': `${KNABEN_BASE_URL}/`
+                }
+            });
+
+            if (!response.ok) {
+                console.warn(`🦉 [Page ${page}] Failed with status ${response.status}`);
+                continue; // Try next page
             }
-        });
 
-        if (!response.ok) {
-            throw new Error(`Knaben.org HTML search failed with status ${response.status}`);
-        }
+            const html = await response.text();
+            const $ = cheerio.load(html);
 
-        const html = await response.text();
-        const $ = cheerio.load(html);
-
-        const rows = $('table.table tbody tr');
-        if (rows.length === 0) {
-            console.log('🦉 No results found on Knaben.org.');
-            return [];
-        }
-
-        console.log(`🦉 Found ${rows.length} potential results on Knaben.org.`);
-
-        const streams = rows.toArray().map(row => {
-            const $row = $(row);
-
-            const cells = $row.find('td');
-            // --- NUOVA MODIFICA: Filtro per contenuti per adulti ---
-            // Estrai la categoria dalla prima cella per il filtraggio.
-            const torrentTitleForLog = $row.find('td:nth-child(2) a[title]').first().text().trim();
-            const categoryText = cells.eq(0).text().trim();
-            if (isAdultCategory(categoryText) || isAdultCategory(torrentTitleForLog)) {
-                // Usiamo un selettore temporaneo per ottenere il titolo solo per il logging,
-                // nel caso in cui questo risultato venga scartato.
-                console.log(`🦉 Filtering adult content by category: "${torrentTitleForLog}" (Category: ${categoryText})`);
-                return null; // Scarta il risultato
+            const rows = $('table.table tbody tr');
+            if (rows.length === 0) {
+                console.log(`🦉 [Page ${page}] No results found. Stopping pagination.`);
+                break; // No more results, stop looping
             }
-            // --- FINE MODIFICA ---
+
+            console.log(`🦉 [Page ${page}] Found ${rows.length} potential results.`);
+
+            const pageStreams = rows.toArray().map(row => {
+                const $row = $(row);
+
+                const cells = $row.find('td');
+                // --- NUOVA MODIFICA: Filtro per contenuti per adulti ---
+                // Estrai la categoria dalla prima cella per il filtraggio.
+                const torrentTitleForLog = $row.find('td:nth-child(2) a[title]').first().text().trim();
+                const categoryText = cells.eq(0).text().trim();
+                if (isAdultCategory(categoryText) || isAdultCategory(torrentTitleForLog)) {
+                    // Usiamo un selettore temporaneo per ottenere il titolo solo per il logging,
+                    // nel caso in cui questo risultato venga scartato.
+                    // console.log(`🦉 Filtering adult content by category: "${torrentTitleForLog}" (Category: ${categoryText})`);
+                    return null; // Scarta il risultato
+                }
+                // --- FINE MODIFICA ---
 
 
-            // Trova il titolo dall'attributo 'title' del primo link principale nella seconda cella.
-            const titleElement = $row.find('td:nth-child(2) a[title]').first();
-            const torrentTitle = titleElement.text().trim();
+                // Trova il titolo dall'attributo 'title' del primo link principale nella seconda cella.
+                const titleElement = $row.find('td:nth-child(2) a[title]').first();
+                const torrentTitle = titleElement.text().trim();
 
-            // Trova il magnet link cercando un link che inizi con 'magnet:?' nella riga.
-            const magnetElement = $row.find('a[href^="magnet:?"]').first();
-            const magnetLink = magnetElement.attr('href');
+                // Trova il magnet link cercando un link che inizi con 'magnet:?' nella riga.
+                const magnetElement = $row.find('a[href^="magnet:?"]').first();
+                const magnetLink = magnetElement.attr('href');
 
-            // Se non troviamo titolo o magnet, la riga non è valida.
-            // Questo gestisce anche le righe che hanno solo un link "Refresh magnet".
-            if (!torrentTitle || !magnetLink) return null;
+                // Se non troviamo titolo o magnet, la riga non è valida.
+                // Questo gestisce anche le righe che hanno solo un link "Refresh magnet".
+                if (!torrentTitle || !magnetLink) return null;
 
-            const infoHash = extractInfoHash(magnetLink);
-            if (!infoHash) return null;
+                const infoHash = extractInfoHash(magnetLink);
+                if (!infoHash) return null;
 
-            // Estrai gli altri dati dalle celle corrispondenti.
-            const sizeStr = cells.eq(2).text().trim();
-            const seeds = cells.eq(4).text().trim(); // 5th column
-            const leechs = cells.eq(5).text().trim(); // 6th column
-            const sizeInBytes = parseSize(sizeStr);
+                // Estrai gli altri dati dalle celle corrispondenti.
+                const sizeStr = cells.eq(2).text().trim();
+                const seeds = cells.eq(4).text().trim(); // 5th column
+                const leechs = cells.eq(5).text().trim(); // 6th column
+                const sizeInBytes = parseSize(sizeStr);
 
-            return {
-                magnetLink: magnetLink,
-                websiteTitle: torrentTitle,
-                title: torrentTitle,
-                filename: torrentTitle,
-                quality: extractQuality(torrentTitle),
-                size: sizeStr,
-                source: 'Knaben',
-                seeders: parseInt(seeds) || 0,
-                leechers: parseInt(leechs) || 0,
-                infoHash: infoHash.toUpperCase(),
-                mainFileSize: sizeInBytes,
-                pubDate: new Date().toISOString(), // Not available
-                categories: [type === 'movie' ? 'Movies' : 'TV'] // Assume category from search type
-            };
-        }).filter(Boolean);
+                return {
+                    magnetLink: magnetLink,
+                    websiteTitle: torrentTitle,
+                    title: torrentTitle,
+                    filename: torrentTitle,
+                    quality: extractQuality(torrentTitle),
+                    size: sizeStr,
+                    source: 'Knaben',
+                    seeders: parseInt(seeds) || 0,
+                    leechers: parseInt(leechs) || 0,
+                    infoHash: infoHash.toUpperCase(),
+                    mainFileSize: sizeInBytes,
+                    pubDate: new Date().toISOString(), // Not available
+                    categories: [type === 'movie' ? 'Movies' : 'TV'] // Assume category from search type
+                };
+            }).filter(Boolean);
 
-        console.log(`🦉 Successfully parsed ${streams.length} streams from Knaben.org.`);
-        return streams;
+            allStreams.push(...pageStreams);
+            
+            // Optional: Add a small delay to be nice to the server
+            if (page < maxPages) await new Promise(r => setTimeout(r, 200));
 
-    } catch (error) {
-        console.error(`❌ Error in fetchKnabenData (HTML Scraper):`, error);
-        return [];
+        } catch (error) {
+            console.error(`❌ Error in fetchKnabenData (Page ${page}):`, error.message);
+        }
     }
+
+    console.log(`🦉 Successfully parsed ${allStreams.length} total streams from Knaben.org (Pages 1-${maxPages}).`);
+    return allStreams;
 }
 
 // --- FINE NUOVA SEZIONE ---
@@ -1124,6 +1142,52 @@ function sortByQualityAndSeeders(results) {
         return (b.seeders || 0) - (a.seeders || 0);
     });
     return results;
+}
+
+function limitResultsByResolution(streams, limit) {
+    if (!limit || limit <= 0) return streams;
+    
+    console.log(`✂️ START LIMIT: ${streams.length} streams, limit=${limit}`);
+
+    const counts = {
+        '4k': 0,
+        '1080p': 0,
+        '720p': 0,
+        '480p': 0,
+        'other': 0
+    };
+    
+    const filtered = streams.filter(stream => {
+        try {
+            const quality = (stream._meta?.quality || '').toLowerCase();
+            const name = (stream.name || '').toLowerCase();
+            const title = (stream.title || '').toLowerCase();
+            const combined = quality + ' ' + name + ' ' + title;
+            
+            let type = 'other';
+            if (combined.includes('2160') || combined.includes('4k')) type = '4k';
+            else if (combined.includes('1080')) type = '1080p';
+            else if (combined.includes('720')) type = '720p';
+            else if (combined.includes('480')) type = '480p';
+            
+            if (counts[type] === undefined) {
+                console.log(`⚠️ Unknown type: ${type}, defaulting to other`);
+                type = 'other';
+            }
+            
+            if (counts[type] < limit) {
+                counts[type]++;
+                return true;
+            }
+            return false;
+        } catch (e) {
+            console.error('❌ Error in filter:', e);
+            return true; // Keep on error
+        }
+    });
+    
+    console.log(`✂️ END LIMIT: ${filtered.length} streams remaining`);
+    return filtered;
 }
 
 // ✅ NUOVA FUNZIONE: Limita i risultati per qualità
@@ -3798,6 +3862,11 @@ async function handleStream(type, id, config, workerOrigin) {
             searchQueries.push(`${shortTitle} Complete`);                      // Complete pack
             searchQueries.push(`${shortTitle} S01`);                           // S01 packs
             
+            // 🔥 ADDED: Explicit "ita" queries for international sites
+            searchQueries.push(`${shortTitle} ita`);
+            searchQueries.push(`${shortTitle} S${seasonStr} ita`);
+            searchQueries.push(`${shortTitle} S${seasonStr}E${episodeStr} ita`);
+            
             // 2. COMPLETE QUERIES WITH CODES (full title with ":")
             if (title !== shortTitle) {
                 searchQueries.push(`${title} S${seasonStr}E${episodeStr}`);
@@ -3978,12 +4047,12 @@ async function handleStream(type, id, config, workerOrigin) {
             
             // Knaben (Always run if enabled, but skip Italian-specific keywords if needed)
             if (useKnaben) {
-                if (!isCorsaroSpecific) {
-                    searchPromises.push({
-                        name: 'Knaben',
-                        promise: fetchKnabenData(query, searchType)
-                    });
-                }
+                // 🔥 MODIFIED: Always search Knaben, even for "Stagione" or "Completa"
+                // The user wants to ensure we catch everything, even if it seems Italian-specific
+                searchPromises.push({
+                    name: 'Knaben',
+                    promise: fetchKnabenData(query, searchType)
+                });
             }
 
             // Jackettio
@@ -4034,6 +4103,9 @@ async function handleStream(type, id, config, workerOrigin) {
                 rawResultsByProvider.Knaben = knabenIta;
             } else {
                 console.log(`🦉 [Knaben] No Italian results found. Keeping all ${rawResultsByProvider.Knaben.length} international results.`);
+                // ✅ LIMIT FALLBACK: Keep only top 3 results to avoid flooding
+                rawResultsByProvider.Knaben = sortByQualityAndSeeders(rawResultsByProvider.Knaben).slice(0, 3);
+                console.log(`🦉 [Knaben] Limited fallback to top 3 results.`);
             }
         }
 
@@ -4045,6 +4117,9 @@ async function handleStream(type, id, config, workerOrigin) {
                 rawResultsByProvider.UIndex = uindexIta;
             } else {
                 console.log(`📊 [UIndex] No Italian results found. Keeping all ${rawResultsByProvider.UIndex.length} international results.`);
+                // ✅ LIMIT FALLBACK: Keep only top 3 results to avoid flooding
+                rawResultsByProvider.UIndex = sortByQualityAndSeeders(rawResultsByProvider.UIndex).slice(0, 3);
+                console.log(`📊 [UIndex] Limited fallback to top 3 results.`);
             }
         }
 
@@ -4465,7 +4540,7 @@ async function handleStream(type, id, config, workerOrigin) {
         }
         
         // ✅ Build streams with enhanced error handling - supports multiple debrid services
-        const streams = [];
+        let streams = [];
         
         for (const result of filteredResults) {
             try {
@@ -4863,10 +4938,9 @@ async function handleStream(type, id, config, workerOrigin) {
             }
         }
         
-        // ✅ Enhanced sorting: Cached > Resolution > Size > Seeders
+        // ✅ GLOBAL SORTING: Cache > Resolution > Size > Seeders
         streams.sort((a, b) => {
             // 1. Cached Status (Cached first)
-            // Check for '⚡' in name or _meta.cached
             const isCachedA = (a._meta && a._meta.cached) || (a.name && a.name.includes('⚡'));
             const isCachedB = (b._meta && b._meta.cached) || (b.name && b.name.includes('⚡'));
             
@@ -4934,6 +5008,16 @@ async function handleStream(type, id, config, workerOrigin) {
             const seedsB = b._meta?.seeders || 0;
             return seedsB - seedsA;
         });
+
+        // ✅ Apply Max Resolution Limit (if configured)
+        if (config.max_res_limit) {
+            const limit = parseInt(config.max_res_limit);
+            if (!isNaN(limit) && limit > 0) {
+                console.log(`✂️ Applying resolution limit: max ${limit} results per resolution`);
+                streams = limitResultsByResolution(streams, limit);
+            }
+        }
+
         const cachedCount = streams.filter(s => s.name.includes('⚡')).length;
         const totalTime = Date.now() - startTime;
         
@@ -5331,7 +5415,7 @@ export default async function handler(req, res) {
             // Estrae la configurazione dal primo segmento del path
             const encodedConfigStr = pathParts[1]; 
             let config = {};
-            if (encodedConfigStr) {
+            if (encodedConfigStr && encodedConfigStr !== 'stream') {
                 try {
                     config = JSON.parse(atob(encodedConfigStr));
                 } catch (e) {
