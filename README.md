@@ -2,13 +2,12 @@
 
 <div align="center">
 
+![Stremio](https://img.shields.io/badge/Stremio-Addon-purple?style=for-the-badge)
 ![Node.js](https://img.shields.io/badge/Node.js-Backend-green?style=for-the-badge)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-blue?style=for-the-badge)
 ![Real-Debrid](https://img.shields.io/badge/Real--Debrid-Supported-orange?style=for-the-badge)
-![TorBox](https://img.shields.io/badge/TorBox-Supported-blue?style=for-the-badge)
 ![AllDebrid](https://img.shields.io/badge/AllDebrid-Supported-red?style=for-the-badge)
-![Stremio](https://img.shields.io/badge/Stremio-Addon-purple?style=for-the-badge)
-
+![TorBox](https://img.shields.io/badge/TorBox-Supported-blue?style=for-the-badge)
 
 **Il motore di ricerca italiano per Stremio più avanzato e intelligente.**
 
@@ -35,11 +34,13 @@ La caratteristica più potente di IlCorsaroViola è il suo database "vivo".
 
 ### 🔍 Ricerca Avanzata
 *   **Multi-Provider:** Scansiona simultaneamente IlCorsaroNero, UIndex, Knaben e altri tracker.
+*   **Supporto Jackett:** Integrazione completa con Jackett per utilizzare i propri indexer privati e personalizzati.
 *   **Smart Matching:** Algoritmi avanzati per riconoscere titoli italiani, inglesi, range di episodi (es. `S01E01-10`) e pack completi.
 *   **Enrichment:** Se un titolo non si trova in italiano, il sistema prova automaticamente a cercarlo con il titolo originale o inglese.
 
 ### ⚡ Performance & Debrid
 *   **Supporto Debrid:** Integrazione nativa con Real-Debrid, AllDebrid e TorBox.
+*   **MediaFlow Proxy:** Supporto integrato per MediaFlow Proxy per condividere l'account Real-Debrid in sicurezza senza rischi di ban.
 *   **Smart Caching:** Verifica la disponibilità nella cache dei servizi Debrid per streaming istantaneo senza buffering.
 *   **Cache TTL:** I risultati della cache Debrid vengono ricordati per **20 giorni**, riducendo le chiamate API e velocizzando le risposte.
 
