@@ -4419,8 +4419,8 @@ async function handleStream(type, id, config, workerOrigin) {
                     const cacheStatusIcon = isCached ? '⚡' : '⏬';
                     const errorIcon = streamError ? '⚠️ ' : '';
                     
-                    // New Name Format: Il🏴‍☠️🔮 [🔵] [⚡] \n [Quality]
-                    const streamName = `Il🏴‍☠️🔮 [🔵] [${cacheStatusIcon}]${errorIcon}\n${result.quality || 'Unknown'}`;
+                    // New Name Format: IL 🏴‍☠️ 🔮 [🔵] [⚡] \n [Quality]
+                    const streamName = `IL 🏴‍☠️ 🔮 [🔵] [${cacheStatusIcon}]${errorIcon}\n${result.quality || 'Unknown'}`;
                     
                     const debugInfo = streamError ? `\n⚠️ Stream error: ${streamError}` : '';
                     
@@ -4454,7 +4454,13 @@ async function handleStream(type, id, config, workerOrigin) {
                     const langDisplay = langInfo.isMulti ? '🇬🇧 + 🇮🇹' : (langInfo.isItalian ? '🇮🇹' : '🇬🇧');
                     const languageLine = `🗣️ ${langDisplay}`;
 
-                    const providerLine = `🔗 ${result.source} 👥 ${result.seeders || 0}`;
+                    // Normalize provider name
+                    let providerName = result.source;
+                    if (providerName.toLowerCase().includes('corsaro')) {
+                        providerName = 'IlCorsaroNero';
+                    }
+
+                    const providerLine = `🔗 ${providerName} 👥 ${result.seeders || 0}`;
                     
                     // MFP
                     const mfpActive = config.mediaflow_url && config.mediaflow_password;
@@ -4519,7 +4525,7 @@ async function handleStream(type, id, config, workerOrigin) {
                     const cacheStatusIcon = isCached ? '⚡' : '⏬';
                     const errorIcon = streamError ? '⚠️ ' : '';
                     
-                    const streamName = `Il🏴‍☠️🔮 [📦] [${cacheStatusIcon}]${errorIcon}\n${result.quality || 'Unknown'}`;
+                    const streamName = `IL 🏴‍☠️ 🔮 [📦] [${cacheStatusIcon}]${errorIcon}\n${result.quality || 'Unknown'}`;
                     
                     // New Title Format
                     let titleLine1 = '';
@@ -4548,7 +4554,13 @@ async function handleStream(type, id, config, workerOrigin) {
                     const langDisplay = langInfo.isMulti ? '🇬🇧 + 🇮🇹' : (langInfo.isItalian ? '🇮🇹' : '🇬🇧');
                     const languageLine = `🗣️ ${langDisplay}`;
 
-                    const providerLine = `🔗 ${result.source} 👥 ${result.seeders || 0}`;
+                    // Normalize provider name
+                    let providerName = result.source;
+                    if (providerName.toLowerCase().includes('corsaro')) {
+                        providerName = 'IlCorsaroNero';
+                    }
+
+                    const providerLine = `🔗 ${providerName} 👥 ${result.seeders || 0}`;
                     const lastLine = '';
 
                     const streamTitle = [
@@ -4602,7 +4614,7 @@ async function handleStream(type, id, config, workerOrigin) {
                     const cacheStatusIcon = isCached ? '⚡' : '⏬';
                     const errorIcon = streamError ? '⚠️ ' : '';
                     
-                    const streamName = `Il🏴‍☠️🔮 [🅰️] [${cacheStatusIcon}]${errorIcon}\n${result.quality || 'Unknown'}`;
+                    const streamName = `IL 🏴‍☠️ 🔮 [🅰️] [${cacheStatusIcon}]${errorIcon}\n${result.quality || 'Unknown'}`;
                     
                     // New Title Format
                     let titleLine1 = '';
@@ -4631,7 +4643,13 @@ async function handleStream(type, id, config, workerOrigin) {
                     const langDisplay = langInfo.isMulti ? '🇬🇧 + 🇮🇹' : (langInfo.isItalian ? '🇮🇹' : '🇬🇧');
                     const languageLine = `🗣️ ${langDisplay}`;
 
-                    const providerLine = `🔗 ${result.source} 👥 ${result.seeders || 0}`;
+                    // Normalize provider name
+                    let providerName = result.source;
+                    if (providerName.toLowerCase().includes('corsaro')) {
+                        providerName = 'IlCorsaroNero';
+                    }
+
+                    const providerLine = `🔗 ${providerName} 👥 ${result.seeders || 0}`;
                     const lastLine = '';
 
                     const streamTitle = [
@@ -4665,7 +4683,7 @@ async function handleStream(type, id, config, workerOrigin) {
                 
                 // ✅ P2P STREAM (if no debrid service enabled)
                 if (!useRealDebrid && !useTorbox && !useAllDebrid) {
-                    const streamName = `Il🏴‍☠️🔮 [🧲] [⏬]\n${result.quality || 'Unknown'}`;
+                    const streamName = `IL 🏴‍☠️ 🔮 [🧲] [⏬]\n${result.quality || 'Unknown'}`;
 
                     // New Title Format
                     let titleLine1 = '';
@@ -4694,7 +4712,13 @@ async function handleStream(type, id, config, workerOrigin) {
                     const langDisplay = langInfo.isMulti ? '🇬🇧 + 🇮🇹' : (langInfo.isItalian ? '🇮🇹' : '🇬🇧');
                     const languageLine = `🗣️ ${langDisplay}`;
 
-                    const providerLine = `🔗 ${result.source} 👥 ${result.seeders || 0}`;
+                    // Normalize provider name
+                    let providerName = result.source;
+                    if (providerName.toLowerCase().includes('corsaro')) {
+                        providerName = 'IlCorsaroNero';
+                    }
+
+                    const providerLine = `🔗 ${providerName} 👥 ${result.seeders || 0}`;
                     const lastLine = '';
 
                     const streamTitle = [
