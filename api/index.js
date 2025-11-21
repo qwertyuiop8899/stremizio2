@@ -1886,66 +1886,60 @@ async function proxyThroughMediaFlow(directUrl, mediaflowConfig, filename = null
         return directUrl; // No proxy configured, return direct URL
     }
     
-    try {
-        // Extract filename from URL if not provided
-        if (!filename) {
-            const urlParts = directUrl.split('/');
-            filename = urlParts[urlParts.length - 1] || 'stream.mkv';
-            // Remove query params from filename
-            filename = filename.split('?')[0];
-        }
-        
-        const mediaflowUrl = mediaflowConfig.url.replace(/\/+$/, '');
-        const generateUrlsEndpoint = `${mediaflowUrl}/generate_urls`;
-        
-        // Build request body exactly like AIOStream
-        const requestBody = {
-            mediaflow_proxy_url: mediaflowUrl,
-            api_password: mediaflowConfig.password,
-            urls: [{
-                endpoint: '/proxy/stream',
-                filename: filename,
-                query_params: {
-                    api_password: mediaflowConfig.password
-                },
-                destination_url: directUrl,
-                request_headers: {},
-                response_headers: {}
-            }]
-        };
-        
-        console.log(`🔀 Calling MediaFlow /generate_urls for: ${filename}`);
-        
-        // Call MediaFlow to generate proxy URL
-        const response = await fetch(generateUrlsEndpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
+    // Extract filename from URL if not provided
+    if (!filename) {
+        const urlParts = directUrl.split('/');
+        filename = urlParts[urlParts.length - 1] || 'stream.mkv';
+        // Remove query params from filename
+        filename = filename.split('?')[0];
+    }
+    
+    const mediaflowUrl = mediaflowConfig.url.replace(/\/+$/, '');
+    const generateUrlsEndpoint = `${mediaflowUrl}/generate_urls`;
+    
+    // Build request body exactly like AIOStream
+    const requestBody = {
+        mediaflow_proxy_url: mediaflowUrl,
+        api_password: mediaflowConfig.password,
+        urls: [{
+            endpoint: '/proxy/stream',
+            filename: filename,
+            query_params: {
+                api_password: mediaflowConfig.password
             },
-            body: JSON.stringify(requestBody),
-            signal: AbortSignal.timeout(10000)
-        });
-        
-        if (!response.ok) {
-            throw new Error(`MediaFlow returned ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.error) {
-            throw new Error(data.error);
-        }
-        
-        if (data.urls && data.urls.length > 0) {
-            console.log(`✅ MediaFlow proxy URL generated successfully`);
-            return data.urls[0]; // Return the generated MediaFlow proxy URL
-        } else {
-            throw new Error('No URLs returned from MediaFlow');
-        }
-        
-    } catch (error) {
-        console.error(`❌ MediaFlow proxy setup failed:`, error.message);
-        return directUrl; // Fallback to direct URL on error
+            destination_url: directUrl,
+            request_headers: {},
+            response_headers: {}
+        }]
+    };
+    
+    console.log(`🔀 Calling MediaFlow /generate_urls for: ${filename}`);
+    
+    // Call MediaFlow to generate proxy URL
+    const response = await fetch(generateUrlsEndpoint, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody),
+        signal: AbortSignal.timeout(30000) // Increased timeout to 30s
+    });
+    
+    if (!response.ok) {
+        throw new Error(`MediaFlow returned ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.error) {
+        throw new Error(data.error);
+    }
+    
+    if (data.urls && data.urls.length > 0) {
+        console.log(`✅ MediaFlow proxy URL generated successfully`);
+        return data.urls[0]; // Return the generated MediaFlow proxy URL
+    } else {
+        throw new Error('No URLs returned from MediaFlow');
     }
 }
 
@@ -6063,8 +6057,9 @@ export default async function handler(req, res) {
                             );
                             console.log(`[RealDebrid] MediaFlow proxy applied to all streams`);
                         } catch (mfError) {
-                            console.warn(`[RealDebrid] MediaFlow proxy failed: ${mfError.message}`);
-                            // Keep original URL if MediaFlow fails
+                            console.error(`❌ [RealDebrid] MediaFlow proxy failed: ${mfError.message}`);
+                            // 🛑 STOP! Do not fallback to direct link to avoid bans.
+                            return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/download_failed_v2.mp4`);
                         }
                     }
                     
@@ -6320,8 +6315,9 @@ export default async function handler(req, res) {
                                 finalStreamUrl = await proxyThroughMediaFlow(unrestricted.download, { url: userConfig.mediaflow_url, password: userConfig.mediaflow_password }, null);
                                 console.log(`🔒 Applied MediaFlow proxy to non-cached RD stream`);
                             } catch (mfError) {
-                                console.error(`⚠️ Failed to apply MediaFlow proxy: ${mfError.message}`);
-                                // Fallback to direct URL if MediaFlow fails
+                                console.error(`❌ Failed to apply MediaFlow proxy: ${mfError.message}`);
+                                // 🛑 STOP! Do not fallback to direct link to avoid bans.
+                                return res.redirect(302, `${TORRENTIO_VIDEO_BASE}/videos/download_failed_v2.mp4`);
                             }
                         }
                         
@@ -6568,8 +6564,8 @@ export default async function handler(req, res) {
                             finalStreamUrl = await proxyThroughMediaFlow(unrestricted.download, { url: userConfig.mediaflow_url, password: userConfig.mediaflow_password }, null);
                             console.log(`🔒 Applied MediaFlow proxy to non-cached RD stream (status check)`);
                         } catch (mfError) {
-                            console.error(`⚠️ Failed to apply MediaFlow proxy: ${mfError.message}`);
-                            // Fallback to direct URL if MediaFlow fails
+                            console.error(`❌ Failed to apply MediaFlow proxy: ${mfError.message}`);
+                            return res.status(500).send(JSON.stringify({ status: 'error', message: `MediaFlow Proxy Error: ${mfError.message}` }));
                         }
                     }
 
